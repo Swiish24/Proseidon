@@ -208,13 +208,10 @@ textarea.inp{resize:vertical;font-size:16px}
   <nav class="map" id="map" aria-label="Levels"></nav>
   <main class="card" id="card" aria-live="polite"></main>
   <p class="foot">Each level draws 5 questions from its bank, with no repeats until you've seen them all. Get 4 right to clear a level. Keys 1 to 4 pick an answer, Enter checks it.</p>
-  <div class="row tools" id="tools"><button class="btn ghost small" id="rateT">Rate and give feedback</button><button class="btn ghost small" id="retake">Retake the assessment</button><button class="btn ghost small" id="reset">Reset my progress</button><span id="confirm"></span></div>
+  <div class="row tools" id="tools"><button class="btn ghost small" id="rateT">Rate and give feedback</button><button class="btn ghost small" id="inboxT" hidden>Feedback inbox</button><button class="btn ghost small" id="retake">Retake the assessment</button><button class="btn ghost small" id="reset">Reset my progress</button><span id="confirm"></span></div>
   <section class="card" id="fbpanel" hidden></section>
 </div>
 <div class="toast" id="toast" role="status"></div>
-<form name="feedback" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
-<input type="hidden" name="form-name" value="feedback"><input name="bot-field"><input name="rating"><input name="username"><input name="level"><textarea name="comments"></textarea>
-</form>
 <script type="module" src="app.js"></script>
 </body>
 </html>

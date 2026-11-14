@@ -23,8 +23,9 @@ export function isoWeek(d) {
   return `${y}-W${String(w).padStart(2, "0")}`;
 }
 
-export async function handle(req, store, now = () => Date.now()) {
-  const users = store("users"), rounds = store("rounds"), scores = store("scores");
+export async function handle(req, store, now = () => Date.now(), opts = {}) {
+  const users = store("users"), rounds = store("rounds"), scores = store("scores"), feedback = store("feedback");
+  const admins = String(opts.admins || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/(\.netlify\/functions\/)?api\/?/, "").replace(/\/$/, "");
   let b = {};
@@ -76,20 +77,20 @@ export async function handle(req, store, now = () => Date.now()) {
       const u = { name: b.user, salt, hash: hashPin(b.pin, salt), created: now(), profile: null, tokens: [] };
       const token = newToken(u);
       await users.setJSON(key, u);
-      return json({ token, name: u.name, profile: null, allPts: 0, weekPts: 0 });
+      return json({ token, name: u.name, profile: null, allPts: 0, weekPts: 0, isAdmin: admins.includes(key) });
     }
 
     if (path === "login" && req.method === "POST") {
       const [u, err] = await auth(); if (err) return err;
       const token = typeof b.token === "string" && u.tokens.includes(b.token) ? b.token : newToken(u);
       await users.setJSON(key, u);
-      return json({ token, name: u.name, profile: u.profile, ...(await totals()) });
+      return json({ token, name: u.name, profile: u.profile, isAdmin: admins.includes(key), ...(await totals()) });
     }
 
     if (path === "sync" && req.method === "POST") {
       const [u, err] = await auth(); if (err) return err;
       if (!b.profile || typeof b.profile !== "object") return json({ error: "Missing progress data." }, 400);
-      if (JSON.stringify(b.profile).length > 200000) return json({ error: "Progress data too large." }, 413);
+      if (JSON.stringify(b.profile).length > 100000) return json({ error: "Progress data too large." }, 413);
       if (!u.profile || (b.profile.updatedAt || 0) >= (u.profile.updatedAt || 0)) { u.profile = b.profile; await users.setJSON(key, u); }
       return json({ ok: true, profile: u.profile });
     }
@@ -132,6 +133,24 @@ export async function handle(req, store, now = () => Date.now()) {
       if (finished) await rounds.delete(rid); else await rounds.setJSON(rid, r);
       if (pts + bonus > 0 || finished) await addPts(u.name, pts + bonus, finished);
       return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, ...(await totals()) });
+    }
+
+    if (path === "feedback" && req.method === "POST") {
+      const rating = Number(b.rating) || 0, comments = String(b.comments || "").trim().slice(0, 1000);
+      if (!(rating >= 0 && rating <= 5)) return json({ error: "Rating must be 1 to 5 stars." }, 400);
+      if (!rating && !comments) return json({ error: "Add a rating or a comment first." }, 400);
+      const id = `${now()}-${crypto.randomBytes(4).toString("hex")}`;
+      await feedback.setJSON(id, { at: now(), rating, comments, username: okName(b.user) ? b.user : "", level: Number(b.level) || null });
+      return json({ ok: true });
+    }
+
+    if (path === "feedback/list" && req.method === "POST") {
+      const [u, err] = await auth(); if (err) return err;
+      if (!admins.includes(key)) return json({ error: "Only admins can read feedback." }, 403);
+      const { blobs } = await feedback.list({ prefix: "" });
+      const keys = blobs.map(x => x.key).sort().reverse().slice(0, 200);
+      const items = (await Promise.all(keys.map(k => feedback.get(k, { type: "json" })))).filter(Boolean);
+      return json({ items });
     }
 
     if (path === "leaderboard" && req.method === "GET") {

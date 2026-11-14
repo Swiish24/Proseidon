@@ -17,7 +17,7 @@ function weekKey() { const d = new Date(); const t = new Date(Date.UTC(d.getFull
 
 let DB = { users: {}, current: null };
 try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); if (d && d.users) DB = d; } catch (e) {}
-let U = null, AUTH = null, ONLINE = false, PTS = { week: 0, all: 0 };
+let U = null, AUTH = null, ONLINE = false, ADMIN = false, PTS = { week: 0, all: 0 };
 const S = { mode: "loading", lvl: 0, round: [], qi: 0, res: [], prac: [], pi: 0, sel: null, typed: "", answered: false, pq: [], pres: [], hint: false, order: [0, 1, 2, 3], set: null, rp: null, served: {}, qStart: {}, roundPts: 0, arena: null, lb: "week" };
 
 function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, updatedAt: 0 }; }
@@ -85,7 +85,7 @@ function tag(back) {
   const t = $("tag");
   if (!U) { t.textContent = "Climb ten levels of English, from parts of speech to PhD."; return; }
   t.innerHTML = `${back ? "Welcome back, " : "Playing as "}<b>${esc(U.name)}</b>${AUTH && ONLINE ? ` · ${rankFor(PTS.all).name}` : ` <span class="off">offline</span>`} · <button class="link" id="sw">Switch player</button>`;
-  $("sw").onclick = () => { DB.current = null; U = null; AUTH = null; persist(); S.mode = "welcome"; tag(); render(); };
+  $("sw").onclick = () => { DB.current = null; U = null; AUTH = null; ADMIN = false; $("inboxT").hidden = true; persist(); S.mode = "welcome"; tag(); render(); };
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); }
 function floatUp(text, cls) { const c = $("card"); requestAnimationFrame(() => { const x = document.createElement("div"); x.className = "xp " + (cls || ""); x.textContent = text; c.appendChild(x); setTimeout(() => x.remove(), 1200); }); }
@@ -101,7 +101,8 @@ function enter(key, res, isNew) {
   p = fill(p || blank(res.name)); p.name = res.name;
   DB.users[key] = { profile: p, token: res.token || null }; DB.current = key;
   U = p; AUTH = res.token ? { user: res.name, token: res.token } : null;
-  PTS = { week: res.weekPts || 0, all: res.allPts || 0 };
+  PTS = { week: res.weekPts || 0, all: res.allPts || 0 }; ADMIN = !!res.isAdmin;
+  $("inboxT").hidden = !ADMIN;
   refreshDaily(); S.lvl = U.lvl || 0; save(); tag(!isNew);
   if (U.placed) home(); else { S.mode = "intro"; render(); }
 }
@@ -282,6 +283,7 @@ function render() {
   if (S.mode === "arena") return arenaView();
   if (S.mode === "scene") return sceneView();
   if (S.mode === "lb") return lbView();
+  if (S.mode === "inbox") return inboxView();
   if (S.mode === "done") return done();
   if (S.mode === "setdone") return setDone();
   const L = LV[S.lvl];
@@ -385,10 +387,20 @@ function openFb() {
 async function sendFb() {
   const txt = $("fbtext").value.trim();
   if (!stars && !txt) { $("fberr").textContent = "Add a rating or a comment first."; return; }
-  const body = new URLSearchParams({ "form-name": "feedback", rating: stars ? String(stars) : "", comments: txt, username: U ? U.name : "", level: String(S.lvl + 1), "bot-field": "" });
   $("fbsend").textContent = "Sending…";
-  try { const r = await fetch("/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() }); if (!r.ok) throw 0; $("fbpanel").innerHTML = `<h3>Thanks for the feedback.</h3><p class="foot">It helps make Proseidon better.</p>`; }
-  catch (e) { $("fbsend").textContent = "Send feedback"; $("fberr").textContent = "Your feedback couldn't be sent. Check your connection and try again."; }
+  try { await api("/feedback", { rating: stars, comments: txt, user: U ? U.name : "", level: S.lvl + 1 }); $("fbpanel").innerHTML = `<h3>Thanks for the feedback.</h3><p class="foot">It helps make Proseidon better.</p>`; }
+  catch (e) { $("fbsend").textContent = "Send feedback"; $("fberr").textContent = ONLINE ? "Your feedback couldn't be sent. Check your connection and try again." : "Feedback needs the online version of Proseidon."; }
+}
+async function inboxView() {
+  $("card").innerHTML = `<span class="pill">Feedback inbox</span><p class="foot">Loading…</p>`;
+  try {
+    const r = await api("/feedback/list", { ...AUTH });
+    const avg = r.items.filter(x => x.rating).reduce((a, x, _, arr) => a + x.rating / arr.length, 0);
+    $("card").innerHTML = `<span class="pill">Feedback inbox · only you can see this</span><p class="prompt">${r.items.length} response${r.items.length === 1 ? "" : "s"}${avg ? ` · average ${avg.toFixed(1)} stars` : ""}</p>` +
+      (r.items.length ? `<div class="skills">${r.items.map(x => `<div class="skill"><div class="sk-top"><span><b>${x.rating ? "★".repeat(x.rating) + "☆".repeat(5 - x.rating) : "No rating"}</b> <span class="foot">${esc(x.username || "anonymous")}${x.level ? ` · Level ${x.level}` : ""}</span></span><span class="foot">${new Date(x.at).toLocaleString()}</span></div>${x.comments ? `<p style="margin:0">${esc(x.comments)}</p>` : ""}</div>`).join("")}</div>` : `<p class="lead">No feedback yet.</p>`) +
+      `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
+  } catch (e) { $("card").innerHTML = `<span class="pill">Feedback inbox</span><p class="err">${esc(e.message)}</p><div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`; }
+  $("hm").onclick = home;
 }
 
 /* ---------- wiring ---------- */
@@ -407,7 +419,7 @@ document.querySelectorAll("#tiles .tile").forEach(t => t.onclick = () => {
   if (!U) return; const v = t.dataset.view;
   if (v === "home") home(); else if (v === "review") startReview(); else { S.mode = v; render(); }
 });
-$("rateT").onclick = openFb; $("retake").onclick = startPlace;
+$("rateT").onclick = openFb; $("retake").onclick = startPlace; $("inboxT").onclick = () => { if (ADMIN) { S.mode = "inbox"; render(); } };
 $("reset").onclick = () => {
   $("confirm").innerHTML = `<span class="foot">This clears ${esc(U.name)}'s level, XP, review queue, and skills. Leaderboard points stay.</span> <button class="btn small brass" id="yes">Yes, reset</button> <button class="btn ghost small" id="no">Cancel</button>`;
   $("no").onclick = () => { $("confirm").innerHTML = ""; };

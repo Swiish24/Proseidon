@@ -98,3 +98,17 @@ console.log("All server tests passed.");
   assert.equal((await call("login", { user: "Emoryy.1", pin: "2468" })).status, 200, "login is case-insensitive");
   console.log("Username rule tests passed.");
 }
+
+// Feedback: anyone can send; only admins can read
+{
+  const call2 = async (path, body, admins) => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now, { admins }); return { status: res.status, ...(await res.json()) }; };
+  assert.equal((await call2("feedback", { rating: 5, comments: "Love the Agora", user: "emoryy.1", level: 3 })).status, 200);
+  assert.equal((await call2("feedback", { rating: 0, comments: "" })).status, 400, "empty feedback blocked");
+  assert.equal((await call2("feedback", { rating: 9 })).status, 400, "bad rating blocked");
+  const tok = (await call2("login", { user: "Dan_W", pin: "4321" === "x" ? "" : "1234" }, "dan_w"));
+  assert.equal(tok.isAdmin, true, "admin flag on login");
+  assert.equal((await call2("feedback/list", { user: "Dan_W", token: tok.token }, "")).status, 403, "non-admin blocked");
+  const list = await call2("feedback/list", { user: "Dan_W", token: tok.token }, "Dan_W, someone");
+  assert.equal(list.items.length, 1); assert.equal(list.items[0].comments, "Love the Agora");
+  console.log("Feedback tests passed.");
+}

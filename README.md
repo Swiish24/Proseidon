@@ -5,12 +5,19 @@ Climb ten levels of English, from parts of speech to PhD. Live at https://prosei
 ## What's here
 
 - `public/`: the game (index.html, app.js) and the shared question bank (bank.js)
-- `netlify/functions/`: the server for accounts, scored rounds, and the leaderboard
+- `netlify/functions/lib/core.mjs`: the server logic for accounts, scored rounds, leaderboard, and feedback (shared by both hosts)
+- `src/worker.mjs` + `wrangler.jsonc`: Cloudflare host (static files plus one Durable Object for storage)
+- `netlify/functions/api.mjs` + `netlify.toml`: Netlify host (Netlify Blobs for storage)
 - `test/`: server tests (`npm test`)
 
 ## How it runs
 
-Netlify builds from this repo on every push. The server stores players and scores in Netlify Blobs, with no outside database. Feedback arrives through Netlify Forms.
+The same code runs on Cloudflare Workers or Netlify. Each host builds from this repo on every push to `main`.
+
+- Cloudflare: build command `npm install`, deploy command `npx wrangler deploy`.
+- Netlify: settings come from `netlify.toml`.
+
+Feedback is saved by the game's own server. To read it in the game, add your username to `ADMIN_USERS` (in `wrangler.jsonc` for Cloudflare, or as an environment variable on Netlify), then use the Feedback inbox button.
 
 ## Scoring
 

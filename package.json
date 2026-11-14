@@ -1,13 +1,18 @@
 {
   "name": "proseidon",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
   "description": "Proseidon: climb ten levels of English, from parts of speech to PhD.",
   "scripts": {
-    "test": "node test/server.test.mjs"
+    "test": "node test/server.test.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.7"
+  },
+  "devDependencies": {
+    "wrangler": "4.153.0"
   }
 }
