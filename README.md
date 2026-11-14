@@ -1,6 +1,6 @@
 # Proseidon
 
-Climb ten levels of English, from parts of speech to PhD. Live at https://proseidonspath.netlify.app
+Climb ten levels of English, from parts of speech to PhD. Live at https://proseidon-game.netlify.app
 
 ## What's here
 
