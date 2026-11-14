@@ -86,3 +86,15 @@ assert.equal((await call("leaderboard?period=week")).rows.length, 0);
 assert.equal((await call("leaderboard?period=all")).rows.length, 1);
 assert.equal(isoWeek(new Date(Date.UTC(2026, 0, 1))), "2026-W01");
 console.log("All server tests passed.");
+
+// Usernames with periods and hyphens (real-user report: "emoryy.1")
+{
+  const reg = async (user) => (await call("register", { user, pin: "2468" })).status;
+  assert.equal(await reg("emoryy.1"), 200, "period allowed");
+  assert.equal(await reg("jo-ann"), 200, "hyphen allowed");
+  assert.equal(await reg(".dot"), 400, "cannot start with a period");
+  assert.equal(await reg("dot."), 400, "cannot end with a period");
+  assert.equal(await reg("has space"), 400, "spaces blocked");
+  assert.equal((await call("login", { user: "Emoryy.1", pin: "2468" })).status, 200, "login is case-insensitive");
+  console.log("Username rule tests passed.");
+}

@@ -108,19 +108,22 @@ function enter(key, res, isNew) {
 function welcome(prefill) {
   const others = Object.keys(DB.users);
   $("card").innerHTML = `<p class="big">Welcome aboard.</p><p class="lead">Proseidon is a game for sharper English. Climb ten levels, from parts of speech to PhD-level rhetoric, and compete on the leaderboard.</p>
-  <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" placeholder="wordsmith_42" value="${esc(prefill || "")}"></div>
-  ${ONLINE ? `<div class="field" style="max-width:140px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••"></div>` : ""}</div>
-  <p class="err" id="err"></p><div id="confirmNew"></div>
+  <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wordsmith.42" aria-describedby="nmHelp nmErr" value="${esc(prefill || "")}"><span class="foot" id="nmHelp">Letters, numbers, periods, hyphens, or underscores</span><p class="err" id="nmErr" role="alert"></p></div>
+  ${ONLINE ? `<div class="field" style="max-width:160px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="••••" aria-describedby="pinErr"><p class="err" id="pinErr" role="alert"></p></div>` : ""}</div>
+  <p class="err" id="err" role="alert"></p><div id="confirmNew"></div>
   <div class="row"><button class="btn" id="go">Continue</button></div>
   ${others.length ? `<div class="field" style="max-width:none"><span class="lbl">Players on this device</span><div class="row">${others.map(k => `<button class="btn ghost small" data-k="${esc(k)}">${esc(DB.users[k].profile.name)}</button>`).join("")}</div></div>` : ""}
   <p class="foot">${ONLINE ? "New here? Pick a username and PIN. Returning? Enter yours to pick up on any device." : "Offline mode: progress saves in this browser only, and scores won't post to the leaderboard."}</p>`;
-  const err = m => { $("err").textContent = m; };
+  const clearErrs = () => { ["err", "nmErr", "pinErr"].forEach(id => { if ($(id)) $(id).textContent = ""; }); ["nm", "pin"].forEach(id => { if ($(id)) $(id).classList.remove("wrong"); }); };
+  const err = (m, field) => { clearErrs(); const box = field && $(field + "Err") ? field + "Err" : "err"; $(box).textContent = m; if (field && $(field)) { $(field).classList.add("wrong"); $(field).focus(); } };
   const go = async () => {
     const v = $("nm").value.trim(); const k = v.toLowerCase();
-    if (!/^[A-Za-z0-9_]{3,20}$/.test(v)) return err("Use 3 to 20 letters, numbers, or underscores.");
+    if (v.length < 3 || v.length > 20) return err("Usernames are 3 to 20 characters long.", "nm");
+    if (/[^A-Za-z0-9_.-]/.test(v)) { const bad = [...new Set(v.match(/[^A-Za-z0-9_.-]/g))].map(c => c === " " ? "spaces" : `“${c}”`).join(", "); return err(`Usernames can't include ${bad}. Use letters, numbers, periods, hyphens, or underscores.`, "nm"); }
+    if (!/^[A-Za-z0-9].*[A-Za-z0-9]$/.test(v)) return err("Start and end your username with a letter or number.", "nm");
     if (!ONLINE) { if (!DB.users[k]) DB.users[k] = { profile: blank(v), token: null }; return enter(k, { name: DB.users[k].profile.name, profile: DB.users[k].profile }, !DB.users[k].profile.placed); }
     const pin = $("pin").value.trim();
-    if (!/^\d{4}$/.test(pin)) return err("Enter a 4-digit PIN.");
+    if (!/^\d{4}$/.test(pin)) return err("Your PIN must be exactly 4 numbers.", "pin");
     $("go").textContent = "Checking…";
     try { enter(k, await api("/login", { user: v, pin }), false); }
     catch (e) {
@@ -130,16 +133,16 @@ function welcome(prefill) {
         $("confirmNew").innerHTML = `<div class="fb tip"><h3>New player?</h3><p>No one has the username “${esc(v)}” yet. Create it with this PIN? Remember your PIN. You'll need it on other devices.</p><div class="row" style="margin-top:8px"><button class="btn brass" id="mk">Create player</button></div></div>`;
         $("mk").onclick = async () => { try { enter(k, await api("/register", { user: v, pin }), true); } catch (e2) { err(e2.message); } };
         $("mk").focus();
-      } else err(e.message);
+      } else err(e.message, e.status === 401 ? "pin" : e.status === 400 ? "nm" : null);
     }
   };
   $("go").onclick = go;
-  ["nm", "pin"].forEach(id => { if ($(id)) { $(id).onkeydown = e => { if (e.key === "Enter") go(); }; $(id).oninput = () => { err(""); $("confirmNew").innerHTML = ""; }; } });
+  ["nm", "pin"].forEach(id => { if ($(id)) { $(id).onkeydown = e => { if (e.key === "Enter") go(); }; $(id).oninput = () => { clearErrs(); $("confirmNew").innerHTML = ""; }; } });
   document.querySelectorAll("[data-k]").forEach(b => b.onclick = async () => {
     const rec = DB.users[b.dataset.k];
     if (ONLINE && rec.token) { try { return enter(b.dataset.k, await api("/login", { user: rec.profile.name, token: rec.token }), false); } catch (e) {} }
     if (!ONLINE) return enter(b.dataset.k, { name: rec.profile.name, profile: rec.profile }, false);
-    $("nm").value = rec.profile.name; $("pin").focus(); err("Enter your PIN to continue.");
+    $("nm").value = rec.profile.name; err("Enter your PIN to continue.", "pin");
   });
   (prefill && $("pin") ? $("pin") : $("nm")).focus();
 }

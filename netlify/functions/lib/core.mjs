@@ -8,7 +8,8 @@ const LOCK_AFTER = 10;
 const LOCK_MS = 15 * 60e3;
 
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-const okName = u => typeof u === "string" && /^[A-Za-z0-9_]{3,20}$/.test(u);
+export const NAME_RULE = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{1,18})[A-Za-z0-9]$/;
+const okName = u => typeof u === "string" && NAME_RULE.test(u);
 const okPin = p => typeof p === "string" && /^\d{4}$/.test(p);
 const hashPin = (pin, salt) => crypto.scryptSync(pin, salt, 32).toString("hex");
 const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -68,7 +69,7 @@ export async function handle(req, store, now = () => Date.now()) {
     if (path === "health") return json({ ok: true });
 
     if (path === "register" && req.method === "POST") {
-      if (!okName(b.user)) return json({ error: "Use 3 to 20 letters, numbers, or underscores." }, 400);
+      if (!okName(b.user)) return json({ error: "Usernames are 3 to 20 characters: letters, numbers, periods, hyphens, or underscores. Start and end with a letter or number." }, 400);
       if (!okPin(b.pin)) return json({ error: "Your PIN must be 4 digits." }, 400);
       if (await users.get(key, { type: "json" })) return json({ error: "That username is taken. Try another." }, 409);
       const salt = crypto.randomBytes(16).toString("hex");
