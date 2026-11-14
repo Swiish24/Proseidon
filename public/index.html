@@ -136,6 +136,30 @@ table.lb{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .toast.show{animation:toast 3.2s ease forwards}
 @keyframes drain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,10px)}10%,85%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+
+
+h1{display:flex;align-items:center;gap:10px}
+.logo{width:28px;height:38px;color:var(--brass);flex-shrink:0}
+.wave{color:var(--sea);opacity:.45;height:14px;overflow:hidden;margin-top:-8px}
+.wave svg{width:200%;height:14px;display:block;animation:swell 14s linear infinite}
+@keyframes swell{to{transform:translateX(-50%)}}
+.tile{flex-direction:column;gap:0;line-height:1.25}
+.tile b{font-size:15px}
+.tile small{font-weight:400;font-size:12px;color:var(--muted)}
+.tile.on small{color:var(--sea)}
+.tide{display:flex;flex-direction:column;gap:4px}
+.timer span{background:var(--sea)}
+.rank{display:flex;flex-direction:column;gap:6px}
+.bar.sea{background:var(--line)}
+.bar.sea span{background:var(--brass)}
+.badges{display:flex;flex-wrap:wrap;gap:8px}
+.bdg{position:relative;width:40px;height:40px;border-radius:50%;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--line)}
+.bdg svg{width:14px;height:20px}
+.bdg i{position:absolute;right:-4px;bottom:-4px;font-style:normal;font-size:11px;font-weight:700;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:0 5px;color:var(--muted)}
+.bdg.got{border:2px solid var(--brass);background:var(--brass-soft);color:var(--brass)}
+.bdg.got i{border-color:var(--brass);color:var(--brass)}
+.rk-t{font-size:12px;font-weight:400;color:var(--brass);margin-left:4px}
+.lv .s{font-size:10.5px}
 @media (max-width:640px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.map{grid-template-columns:repeat(5,minmax(0,1fr))}.opts{grid-template-columns:1fr}h1{font-size:32px}.prompt{font-size:19px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -162,7 +186,7 @@ textarea.inp{resize:vertical;font-size:16px}
 <div class="wrap">
   <header>
     <div>
-      <h1>Proseidon</h1>
+      <h1><svg class="logo" viewBox="0 0 24 32" aria-hidden="true"><path d="M12 31V10M5 4v5a7 7 0 0 0 14 0V4M12 4v6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M3 6l2-4 2 4M10 6l2-4 2 4M17 6l2-4 2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>Proseidon</h1>
       <p class="tag" id="tag">Climb ten levels of English, from parts of speech to PhD.</p>
     </div>
     <div class="stats" aria-live="polite">
@@ -173,12 +197,13 @@ textarea.inp{resize:vertical;font-size:16px}
       <div class="stat"><b id="sAcc">–</b><span>Accuracy</span></div>
     </div>
   </header>
+  <div class="wave" aria-hidden="true"><svg viewBox="0 0 1200 24" preserveAspectRatio="none"><path d="M0 12 Q 15 2 30 12 Q 45 22 60 12 Q 75 2 90 12 Q 105 22 120 12 Q 135 2 150 12 Q 165 22 180 12 Q 195 2 210 12 Q 225 22 240 12 Q 255 2 270 12 Q 285 22 300 12 Q 315 2 330 12 Q 345 22 360 12 Q 375 2 390 12 Q 405 22 420 12 Q 435 2 450 12 Q 465 22 480 12 Q 495 2 510 12 Q 525 22 540 12 Q 555 2 570 12 Q 585 22 600 12 Q 615 2 630 12 Q 645 22 660 12 Q 675 2 690 12 Q 705 22 720 12 Q 735 2 750 12 Q 765 22 780 12 Q 795 2 810 12 Q 825 22 840 12 Q 855 2 870 12 Q 885 22 900 12 Q 915 2 930 12 Q 945 22 960 12 Q 975 2 990 12 Q 1005 22 1020 12 Q 1035 2 1050 12 Q 1065 22 1080 12 Q 1095 2 1110 12 Q 1125 22 1140 12 Q 1155 2 1170 12 Q 1185 22 1200 12" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
   <nav class="tiles" id="tiles" aria-label="Sections">
-    <button class="tile" data-view="home">Home</button>
-    <button class="tile" data-view="review" id="tReview">Review</button>
-    <button class="tile" data-view="weak">Weak spots</button>
-    <button class="tile" data-view="arena">Arena</button>
-    <button class="tile" data-view="lb">Leaderboard</button>
+    <button class="tile" data-view="home"><b>The Harbor</b><small>Home</small></button>
+    <button class="tile" data-view="review"><b id="tReview">Returning Tide</b><small>Review</small></button>
+    <button class="tile" data-view="weak"><b>Rough Waters</b><small>Weak spots</small></button>
+    <button class="tile" data-view="arena"><b>The Agora</b><small>Argument practice</small></button>
+    <button class="tile" data-view="lb"><b>The Pantheon</b><small>Leaderboard</small></button>
   </nav>
   <nav class="map" id="map" aria-label="Levels"></nav>
   <main class="card" id="card" aria-live="polite"></main>

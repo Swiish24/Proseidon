@@ -1,7 +1,7 @@
 // Proseidon server logic: accounts, scored rounds, leaderboard.
 // Storage is injected so this file can be tested without Netlify.
 import crypto from "node:crypto";
-import { LV, BYID, check, points } from "../../../public/bank.js";
+import { LV, BYID, check, points, rankFor } from "../../../public/bank.js";
 
 const ROUND_TTL = 60 * 60e3;
 const LOCK_AFTER = 10;
@@ -139,7 +139,9 @@ export async function handle(req, store, now = () => Date.now()) {
       const { blobs } = await scores.list({ prefix });
       const rows = (await Promise.all(blobs.map(x => scores.get(x.key, { type: "json" })))).filter(r => r && r.pts > 0);
       rows.sort((a, b2) => b2.pts - a.pts);
-      return json({ period, week: week(), rows: rows.slice(0, 50).map(r => ({ name: r.name, pts: r.pts, rounds: r.rounds || 0 })) });
+      const top = rows.slice(0, 50);
+      const allPts = period === "all" ? top.map(r => r.pts) : await Promise.all(top.map(async r => { const a = await scores.get(`all/${r.name.toLowerCase()}`, { type: "json" }); return a ? a.pts : r.pts; }));
+      return json({ period, week: week(), rows: top.map((r, i) => ({ name: r.name, pts: r.pts, rounds: r.rounds || 0, rank: rankFor(allPts[i]).name })) });
     }
 
     return json({ error: "Not found." }, 404);

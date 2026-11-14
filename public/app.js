@@ -1,10 +1,11 @@
-import { LV, BYID, ARENA, PLACE_LV, check, answerText } from "./bank.js";
+import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor } from "./bank.js";
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
 const ONB = ["welcome", "intro", "place", "placed", "loading"];
 const KEY = "proseidon_v4";
 const DAY = 864e5;
+const trident = `<svg viewBox="0 0 24 32" aria-hidden="true"><path d="M12 31V10M5 4v5a7 7 0 0 0 14 0V4M12 4v6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M3 6l2-4 2 4M10 6l2-4 2 4M17 6l2-4 2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -75,15 +76,15 @@ function stats() {
   $("sXp").textContent = U ? U.xp : 0;
   $("sAcc").textContent = U && U.total ? Math.round(100 * U.right / U.total) + "%" : "–";
   const due = U ? dueIds().length : 0;
-  $("tReview").innerHTML = `Review${due ? ` <span class="badge">${due}</span>` : ""}`;
+  $("tReview").innerHTML = `Returning Tide${due ? ` <span class="badge">${due}</span>` : ""}`;
 }
 function map() {
-  $("map").innerHTML = LV.map((v, k) => { const b = U && U.best[k]; let c = "lv"; if (b >= 4) c += " done"; if (k === S.lvl) c += " cur"; return `<button class="${c}" data-lv="${k}" aria-label="Level ${k + 1}: ${v.t}"><span class="n">${k + 1}</span><span class="s">${b != null ? b + "/5" : v.t.split(" ")[0]}</span></button>`; }).join("");
+  $("map").innerHTML = LV.map((v, k) => { const b = U && U.best[k]; let c = "lv"; if (b >= 4) c += " done"; if (k === S.lvl) c += " cur"; return `<button class="${c}" data-lv="${k}" aria-label="Level ${k + 1}, ${PLACES[k]}: ${v.t}${b != null ? `, best ${b} of 5` : ""}" title="${v.t}${b != null ? ` · best ${b}/5` : ""}"><span class="n">${k + 1}</span><span class="s">${PLACES[k].replace("The ", "")}</span></button>`; }).join("");
 }
 function tag(back) {
   const t = $("tag");
   if (!U) { t.textContent = "Climb ten levels of English, from parts of speech to PhD."; return; }
-  t.innerHTML = `${back ? "Welcome back, " : "Playing as "}<b>${esc(U.name)}</b>${AUTH && ONLINE ? "" : ` <span class="off">offline</span>`} · <button class="link" id="sw">Switch player</button>`;
+  t.innerHTML = `${back ? "Welcome back, " : "Playing as "}<b>${esc(U.name)}</b>${AUTH && ONLINE ? ` · ${rankFor(PTS.all).name}` : ` <span class="off">offline</span>`} · <button class="link" id="sw">Switch player</button>`;
   $("sw").onclick = () => { DB.current = null; U = null; AUTH = null; persist(); S.mode = "welcome"; tag(); render(); };
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); }
@@ -152,7 +153,7 @@ function placed() {
   const sc = S.pres.filter(Boolean).length, miss = S.pres.indexOf(false), lv = miss === -1 ? 9 : Math.max(0, PLACE_LV[miss] - 1);
   S.lvl = lv; U.placed = true; save(); stats();
   const why = miss === -1 ? "You answered all five. Head straight for the summit." : miss === 0 ? "We'll build from the ground up. The early levels move fast." : `You handled everything through Level ${PLACE_LV[miss - 1] + 1}, so you'll start just past it.`;
-  $("card").innerHTML = `<span class="pill">Assessment complete · ${sc} of 5</span><p class="big">Start at Level ${lv + 1}</p><p class="lead"><b>${LV[lv].t}.</b> ${why}</p><p class="foot">You can jump to any level from the map at any time.</p><div class="row"><button class="btn" id="go">Start Level ${lv + 1}</button><button class="btn ghost" id="again">Retake the assessment</button></div>`;
+  $("card").innerHTML = `<span class="pill">Assessment complete · ${sc} of 5</span><p class="big">Start at Level ${lv + 1} · ${PLACES[lv]}</p><p class="lead"><b>${LV[lv].t}.</b> ${why}</p><p class="foot">You can jump to any level from the map at any time.</p><div class="row"><button class="btn" id="go">Start Level ${lv + 1}</button><button class="btn ghost" id="again">Retake the assessment</button></div>`;
   $("go").onclick = () => start(lv); $("again").onclick = startPlace; $("go").focus();
 }
 
@@ -160,14 +161,17 @@ function placed() {
 function home() { S.mode = "home"; render(); }
 function homeView() {
   const d = U.daily, done = d.last === today(), due = dueIds().length, weak = weakSpots()[0];
-  $("card").innerHTML = `<span class="pill">Your harbor</span><p class="big">Level ${S.lvl + 1}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
+  const rk = rankFor(PTS.all);
+  $("card").innerHTML = `<span class="pill">The Harbor · Home</span><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
+  ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"}</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
   <div class="grid2">
     <div class="mini ${done ? "good" : ""}"><span class="lbl">Today's goal</span><b>${done ? "Done" : "Finish 1 round"}</b><span class="foot">Day streak ${d.streak} · ${d.freezes} freeze${d.freezes === 1 ? "" : "s"} left this week</span></div>
     <div class="mini"><span class="lbl">Review queue</span><b>${due} due</b><span class="foot">${savedIds().length} saved from past misses</span></div>
     <div class="mini"><span class="lbl">Weakest skill</span><b>${weak ? esc(LV[weak.l].skills[weak.tag]) : "Not enough data yet"}</b><span class="foot">${weak ? `Level ${weak.l + 1} · ${Math.round(weak.acc * 100)}% right` : "Play a few rounds to find out."}</span></div>
     <div class="mini"><span class="lbl">Leaderboard points</span><b>${AUTH && ONLINE ? PTS.week + " this week" : "Offline"}</b><span class="foot">${AUTH && ONLINE ? PTS.all + " all-time" : "Play online to compete."}</span></div>
   </div>
-  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="ar">Argument Arena</button></div>`;
+  <div class="badges" aria-label="Level badges">${PLACES.map((pl, k) => `<span class="bdg ${U.best[k] >= 4 ? "got" : ""}" title="${pl}${U.best[k] >= 4 ? " · cleared" : " · not cleared yet"}">${trident}<i>${k + 1}</i></span>`).join("")}</div>
+  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="ar">Enter the Agora</button></div>`;
   $("go").onclick = () => start(S.lvl);
   if ($("rv")) $("rv").onclick = startReview;
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
@@ -176,27 +180,27 @@ function homeView() {
 }
 function startReview() {
   const due = dueIds(), all = savedIds();
-  if (!all.length) { S.mode = "msg"; S.msg = ["Review queue", "Nothing to review yet.", "Questions you miss in level rounds land here and come back after 1 day, then 3 days. Answer one right twice in a row and it leaves the queue."]; return render(); }
+  if (!all.length) { S.mode = "msg"; S.msg = ["Returning Tide · Review", "Nothing to review yet.", "Questions you miss in level rounds land here and come back after 1 day, then 3 days. Answer one right twice in a row and it leaves the queue."]; return render(); }
   const ids = (due.length ? due : shuffle(all)).slice(0, 5);
-  S.set = { kind: "review", early: !due.length, title: due.length ? "Review" : "Early review", ids, i: 0, res: [] }; S.mode = "set"; fresh(); render();
+  S.set = { kind: "review", early: !due.length, title: due.length ? "Returning Tide" : "Returning Tide (early)", ids, i: 0, res: [] }; S.mode = "set"; fresh(); render();
 }
 function startDrill(l, tagKey) { const ids = shuffle(LV[l].q.filter(q => q.tag === tagKey).map(q => q.id)).slice(0, 5); S.set = { kind: "drill", title: "Drill · " + LV[l].skills[tagKey], ids, i: 0, res: [] }; S.mode = "set"; fresh(); render(); }
 function weakView() {
   const w = weakSpots().slice(0, 6);
-  $("card").innerHTML = `<span class="pill">Weak spots</span><p class="prompt">Your skills, weakest first</p>${w.length ? `<div class="skills">${w.map(x => `<div class="skill"><div class="sk-top"><span><b>${esc(LV[x.l].skills[x.tag])}</b> <span class="foot">Level ${x.l + 1}</span></span><span class="foot">${x.r}/${x.t} right</span></div><div class="bar"><span style="width:${Math.round(x.acc * 100)}%"></span></div><button class="btn ghost small" data-drill="${x.l}|${x.tag}">Drill this skill</button></div>`).join("")}</div>` : `<p class="lead">Play a few rounds and this map fills in. Each question is tagged with a skill, so you'll see exactly where to focus.</p>`}<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
+  $("card").innerHTML = `<span class="pill">Rough Waters · Weak spots</span><p class="prompt">Your skills, weakest first</p>${w.length ? `<div class="skills">${w.map(x => `<div class="skill"><div class="sk-top"><span><b>${esc(LV[x.l].skills[x.tag])}</b> <span class="foot">Level ${x.l + 1}</span></span><span class="foot">${x.r}/${x.t} right</span></div><div class="bar"><span style="width:${Math.round(x.acc * 100)}%"></span></div><button class="btn ghost small" data-drill="${x.l}|${x.tag}">Drill this skill</button></div>`).join("")}</div>` : `<p class="lead">Play a few rounds and this map fills in. Each question is tagged with a skill, so you'll see exactly where to focus.</p>`}<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
   document.querySelectorAll("[data-drill]").forEach(b => b.onclick = () => { const [l, t] = b.dataset.drill.split("|"); startDrill(+l, t); });
   $("hm").onclick = home;
 }
 function msgView() { const [p, h, t] = S.msg; $("card").innerHTML = `<span class="pill">${p}</span><p class="prompt">${h}</p><p class="lead">${t}</p><div class="row"><button class="btn" id="hm">Back to home</button></div>`; $("hm").onclick = home; $("hm").focus(); }
 function arenaView() {
-  $("card").innerHTML = `<span class="pill scenic">Argument Arena · pilot</span><p class="prompt">Win the argument, not the fight.</p><p class="lead">Pick your move in real situations. Each scenario teaches one idea from classical rhetoric.</p>
+  $("card").innerHTML = `<span class="pill scenic">The Agora · Argument practice</span><p class="prompt">Win the argument, not the fight.</p><p class="lead">In ancient Athens, the agora was where people met to argue and decide. Pick your move in real situations. Each scenario teaches one idea from classical rhetoric.</p>
   <div class="arena">${ARENA.map(a => { const b = U.arena[a.id]; return `<button class="scen" data-sc="${a.id}"><span class="lbl">${esc(a.concept)}</span><b>${esc(a.title)}</b><span class="stars3">${b == null ? "Not played" : "★".repeat(b) + "☆".repeat(3 - b)}</span></button>`; }).join("")}</div><div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
   document.querySelectorAll("[data-sc]").forEach(b => b.onclick = () => { S.arena = { id: b.dataset.sc, order: shuffle([0, 1, 2]), pick: null }; S.mode = "scene"; render(); });
   $("hm").onclick = home;
 }
 function sceneView() {
   const a = ARENA.find(x => x.id === S.arena.id), p = S.arena.pick;
-  let h = `<span class="pill scenic">Argument Arena · ${esc(a.concept)}</span><p class="prompt">${esc(a.title)}</p><p class="lead">${esc(a.setup)}</p><p class="lbl">Your move:</p><div class="opts one">`;
+  let h = `<span class="pill scenic">The Agora · ${esc(a.concept)}</span><p class="prompt">${esc(a.title)}</p><p class="lead">${esc(a.setup)}</p><p class="lbl">Your move:</p><div class="opts one">`;
   h += S.arena.order.map(k => { let c = "opt"; if (p != null) { if (a.moves[k][1] === 3) c += " right"; else if (k === p) c += " wrong"; } return `<button class="${c}" ${p != null ? "disabled" : ""} data-mv="${k}"><span>${esc(a.moves[k][0])}</span></button>`; }).join("") + "</div>";
   if (p != null) { const m = a.moves[p]; h += `<div class="fb ${m[1] === 3 ? "ok" : m[1] === 1 ? "tip" : "bad"}"><h3>${m[1] === 3 ? "Strong move. ★★★" : m[1] === 1 ? "It works, partly. ★☆☆" : "That backfires. ☆☆☆"}</h3><p>${esc(m[2])}</p></div><div class="fb lesson"><h3>The idea: ${esc(a.concept)}</h3><p>${esc(a.lesson)}</p></div>`;
     const nx = ARENA[(ARENA.indexOf(a) + 1) % ARENA.length];
@@ -218,8 +222,8 @@ function sceneView() {
   });
 }
 async function lbView() {
-  const head = `<span class="pill">Leaderboard</span><div class="tabs" role="tablist"><button role="tab" class="tab ${S.lb === "week" ? "on" : ""}" aria-selected="${S.lb === "week"}" data-tab="week">This week</button><button role="tab" class="tab ${S.lb === "all" ? "on" : ""}" aria-selected="${S.lb === "all"}" data-tab="all">All-time</button></div>`;
-  const how = `<p class="foot">Points come from level rounds only. Each correct answer earns 10 × the level, plus up to 50% for speed (fades over 20 seconds) and up to 40% for a streak in the round. Clearing a level adds a bonus. Weekly boards reset Monday (UTC).</p>`;
+  const head = `<span class="pill">The Pantheon · Leaderboard</span><div class="tabs" role="tablist"><button role="tab" class="tab ${S.lb === "week" ? "on" : ""}" aria-selected="${S.lb === "week"}" data-tab="week">This week</button><button role="tab" class="tab ${S.lb === "all" ? "on" : ""}" aria-selected="${S.lb === "all"}" data-tab="all">All-time</button></div>`;
+  const how = `<p class="foot">Points come from level rounds only. Each correct answer earns 10 × the level, plus up to 50% for speed (fades over 20 seconds) and up to 40% for a streak in the round. Clearing a level adds a bonus. Weekly boards reset Monday (UTC). Rank titles come from all-time points: Deckhand, Sailor (500), Navigator (1,500), Captain (4,000), Admiral (10,000), Triton (25,000), and Poseidon (50,000).</p>`;
   const wire = () => { document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { S.lb = b.dataset.tab; render(); }); if ($("hm")) $("hm").onclick = home; };
   if (!ONLINE) { $("card").innerHTML = head + `<p class="lead">The leaderboard needs the online version of Proseidon.</p>` + how + `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`; return wire(); }
   $("card").innerHTML = head + `<p class="foot">Loading…</p>`; wire();
@@ -228,7 +232,7 @@ async function lbView() {
     const r = await api("/leaderboard?period=" + want);
     if (S.mode !== "lb" || S.lb !== want) return;
     const me = U ? U.name.toLowerCase() : "";
-    const rows = r.rows.map((x, i) => `<tr class="${x.name.toLowerCase() === me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}</td><td class="num">${x.pts.toLocaleString()}</td><td class="num">${x.rounds}</td></tr>`).join("");
+    const rows = r.rows.map((x, i) => `<tr class="${x.name.toLowerCase() === me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)} <span class="rk-t">${esc(x.rank || "")}</span></td><td class="num">${x.pts.toLocaleString()}</td><td class="num">${x.rounds}</td></tr>`).join("");
     $("card").innerHTML = head + (r.rows.length ? `<div class="tblwrap"><table class="lb"><thead><tr><th>#</th><th>Player</th><th class="num">Points</th><th class="num">Rounds</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="lead">No scores yet ${want === "week" ? "this week" : ""}. Play a level round to take the top spot.</p>`) + (AUTH ? `<p class="foot">You: ${PTS.week.toLocaleString()} this week · ${PTS.all.toLocaleString()} all-time</p>` : "") + how + `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
     wire();
   } catch (e) { $("card").innerHTML = head + `<p class="err">The leaderboard couldn't load. Try again in a moment.</p><div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`; wire(); }
@@ -286,9 +290,9 @@ function render() {
   if (main && !S.answered) { serve(S.qi); if (!S.qStart[S.qi]) S.qStart[S.qi] = performance.now(); }
   let dots = "";
   if (main || pl || set) { const arr = pl ? S.pres : set ? S.set.res : S.res, n = set ? S.set.ids.length : 5, cur = set ? S.set.i : S.qi; dots = `<div class="dots" aria-label="Question ${cur + 1} of ${n}">${Array.from({ length: n }, (_, k) => `<span class="dot ${arr[k] === true ? "ok" : arr[k] === false ? "bad" : k === cur ? "now" : ""}"></span>`).join("")}</div>`; }
-  const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : `Scenic route · practice ${S.pi + 1} of 2`;
+  const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : `Scenic route · practice ${S.pi + 1} of 2`;
   let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(label)}</span>${dots}</div>`;
-  if (main && AUTH && ONLINE && !S.answered) { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="timer" title="Speed bonus"><span style="animation-delay:-${el.toFixed(2)}s"></span></div>`; }
+  if (main && AUTH && ONLINE && !S.answered) { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
   h += questionBody(q) + `<p class="err" id="err"></p>`;
   if (S.hint && main && !S.answered) h += `<div class="fb tip"><h3>Coach's tip</h3><p>${esc(L.l)}</p></div>`;
   if (S.answered) {
@@ -352,10 +356,10 @@ function advance() {
 function done() {
   const L = LV[S.lvl], sc = S.res.filter(Boolean).length, pass = sc >= 4, nx = S.lvl + 1 < LV.length;
   const missed = S.round.map((id, i) => S.res[i] ? null : BYID[id].p).filter(Boolean);
-  $("card").innerHTML = `<div class="top"><span class="pill">Level ${S.lvl + 1} · ${esc(L.t)}</span></div><p class="big">${sc} / 5</p>${AUTH && ONLINE ? `<p class="lead" id="rpts">${S.roundPts ? S.roundPts + " leaderboard points this round" : "Tallying points…"}</p>` : ""}
-  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : "So close. Four correct clears the level."}</h3><p>${pass ? "+25 XP bonus." : "Run it again for a fresh mix of questions."}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
+  $("card").innerHTML = `<div class="top"><span class="pill">Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${esc(L.t)}</span></div><p class="big">${sc} / 5</p>${AUTH && ONLINE ? `<p class="lead" id="rpts">${S.roundPts ? S.roundPts + " leaderboard points this round" : "Tallying points…"}</p>` : ""}
+  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : "So close. Four correct clears the level."}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : "Run it again for a fresh mix of questions."}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
   ${missed.length ? `<div class="fb lesson"><h3>Worth another look</h3><p>${missed.map(esc).join("<br>")}</p></div>` : ""}
-  <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to Level ${S.lvl + 2}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;
+  <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to ${PLACES[S.lvl + 1]}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;
   if ($("go")) $("go").onclick = () => start(S.lvl + 1);
   $("again").onclick = () => start(S.lvl); $("hm").onclick = home; $("rate").onclick = openFb;
   ($("go") || $("again")).focus();
