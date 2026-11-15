@@ -20,7 +20,7 @@ try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); if (d && d.user
 let U = null, AUTH = null, ONLINE = false, ADMIN = false, PTS = { week: 0, all: 0 };
 const S = { mode: "loading", lvl: 0, round: [], qi: 0, res: [], prac: [], pi: 0, sel: null, typed: "", answered: false, pq: [], pres: [], hint: false, order: [0, 1, 2, 3], set: null, rp: null, served: {}, qStart: {}, roundPts: 0, arena: null, lb: "week" };
 
-function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, d5: null, tokens: {}, updatedAt: 0 }; }
+function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, d5: null, tokens: {}, hist: {}, pb: {}, updatedAt: 0 }; }
 function fill(p) { const b = blank(p.name); for (const k in b) if (p[k] == null) p[k] = b[k]; return p; }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
 let syncTimer = null;
@@ -49,7 +49,7 @@ function draw(l, n, avoid = []) {
   U.seen[l] = U.seen[l].concat(pick);
   return pick;
 }
-function skillHit(q, ok) { const k = q.lvl + "|" + q.tag; const s = U.skills[k] || (U.skills[k] = { r: 0, t: 0 }); s.t++; if (ok) s.r++; const w = U.weeks || (U.weeks = {}), wk = w[weekKey()] || (w[weekKey()] = { r: 0, t: 0 }); wk.t++; if (ok) wk.r++; const ks = Object.keys(w).sort(); if (ks.length > 8) delete w[ks[0]]; }
+function skillHit(q, ok) { const k = q.lvl + "|" + q.tag; const s = U.skills[k] || (U.skills[k] = { r: 0, t: 0 }); s.t++; if (ok) s.r++; const hh = (U.hist || (U.hist = {}))[k] || (U.hist[k] = []); hh.push(ok ? 1 : 0); if (hh.length > 12) hh.shift(); const w = U.weeks || (U.weeks = {}), wk = w[weekKey()] || (w[weekKey()] = { r: 0, t: 0 }); wk.t++; if (ok) wk.r++; const ks = Object.keys(w).sort(); if (ks.length > 8) delete w[ks[0]]; }
 const STEPS = [1, 3, 7, 21, 60];
 function addReview(id, conf) { const r = U.review[id]; if (r) { r.step = 0; r.due = Date.now() + DAY; if (conf) r.conf = true; return; } U.review[id] = { due: Date.now() + DAY, step: 0, ...(conf ? { conf: true } : {}) }; }
 // Reviews come back after 1, 3, 7, 21, then 60 days. A miss starts the ladder over.
@@ -221,13 +221,43 @@ function placed() {
 
 /* ---------- home and side screens ---------- */
 function home() { S.mode = "home"; render(); }
+// One personalized line for the home screen, built from this player's own history.
+function skillTrends() {
+  const out = [];
+  for (const k in U.skills) {
+    const s = U.skills[k], hh = (U.hist || {})[k] || [];
+    if (s.t < 8 || hh.length < 8) continue;
+    const [l, tag] = k.split("|"); if (!LV[+l] || !LV[+l].skills[tag]) continue;
+    const recent = Math.round(100 * hh.reduce((a, b) => a + b, 0) / hh.length), overall = Math.round(100 * s.r / s.t);
+    out.push({ name: LV[+l].skills[tag], lvl: +l, tag, recent, overall, gain: recent - overall });
+  }
+  return out;
+}
+function coachNote() {
+  const name = isGuest() ? "" : esc(U.name) + ", ";
+  const gapDays = U.updatedAt ? Math.floor((Date.now() - U.updatedAt) / DAY) : 0;
+  const due = dueIds().length, trends = skillTrends(), rk = rankFor(PTS.all);
+  if (gapDays >= 3) return `Welcome back, ${isGuest() ? "sailor" : esc(U.name)}. The harbor kept your place${due ? `, and ${due} review question${due === 1 ? "" : "s"} are ready when you are` : ""}.`;
+  const up = trends.filter(x => x.gain >= 12).sort((a, b) => b.gain - a.gain)[0];
+  if (up) return `${name}your ${up.name.toLowerCase()} is climbing: ${up.recent}% right lately, up from ${up.overall}% overall. Keep that going.`;
+  if ((U.streak || 0) > 0 && U.streak === U.bestStreak && U.streak >= 5) return `${name}you're on your best accuracy streak ever: ${U.streak} in a row. One more makes a new record every time.`;
+  if (AUTH && ONLINE && rk.next && rk.next.at - PTS.all <= 60) return `${name}you're ${(rk.next.at - PTS.all)} points from ${rk.next.name}. One strong round gets you there.`;
+  const down = trends.filter(x => x.gain <= -12).sort((a, b) => a.gain - b.gain)[0];
+  if (down) return `${name}${down.name.toLowerCase()} has slipped lately: ${down.recent}% right in your last few, from ${down.overall}% overall. A short drill would patch it.`;
+  const w = weakSpots()[0];
+  if (w && U.total >= 15) return `${name}your strongest lever right now is ${LV[w.l].skills[w.tag].toLowerCase()}: ${Math.round(w.acc * 100)}% right so far. The drill below targets exactly that.`;
+  if (U.total < 10) return `${name}play a few rounds and the Oracle starts reading your strengths and weak spots.`;
+  return "";
+}
 function homeView() {
   const d = U.daily, due = dueIds().length, weak = weakSpots()[0];
   const rk = rankFor(PTS.all), tideDone = U.tide === today();
   const d5 = d5Today(), allDone = d5 && tideDone;
   const wk = weekStats(), L = LV[S.lvl];
   const tideWhy = due ? `${Math.min(due, 3)} review question${Math.min(due, 3) === 1 ? "" : "s"} from past misses, plus Level ${S.lvl + 1} practice` : `Level ${S.lvl + 1} practice${weak ? `, with an eye on ${LV[weak.l].skills[weak.tag].toLowerCase()}` : ""}`;
+  const note = coachNote();
   $("card").innerHTML = `<span class="pill">The Harbor · Home</span>
+  ${note ? `<p class="oracleline">🔮 <b>The Oracle's note:</b> ${note}</p>` : ""}
   ${allDone ? `<div class="fb ok donefor"><h3>That's today.</h3><p>The Daily Five and your Tide are both done. New ones arrive tomorrow. Extra practice is always open below.</p></div>` : ""}
   <h2 class="sect">Today</h2>
   <div class="tidecard d5card ${d5 ? "done" : ""}"><div><span class="lbl">Daily Five · same five for everyone</span><b>${d5 ? `${d5.res.filter(Boolean).length} / 5 today &nbsp;${squares(d5.res)}` : "5 questions · easy to hard"}</b><span class="foot">${d5 ? "A new Daily Five arrives tomorrow." : "Compare with friends. About 2 minutes."}</span></div><button class="btn ${d5 ? "ghost" : "brass"}" id="d5">${d5 ? "See and share" : "Play the Daily Five"}</button></div>
@@ -237,7 +267,7 @@ function homeView() {
   <h2 class="sect">Your climb</h2>
   <div class="climb"><div><span class="lbl">Level ${S.lvl + 1} of 10 · ${PLACES[S.lvl]}</span><b>${esc(L.t)}</b><span class="foot">You'll practice: ${esc(Object.values(L.skills).join(", ").toLowerCase())}.${U.best[S.lvl] != null ? ` Best so far ${U.best[S.lvl]}/5.` : ""}</span></div><div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}</div></div>
   <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
-  <p class="foot tokens"><b>Olympian tokens:</b> ${Object.entries(GODS).map(([k, g]) => `<span title="${g.name}'s ${g.token}">${g.icon} ${(U.tokens || {})[k] || 0}</span>`).join(" ")} <span class="foot">Win them in rare Trials during level rounds.</span></p>
+  <p class="foot tokens"><b>Olympian tokens:</b> ${Object.entries(GODS).map(([k, g]) => `<span title="${g.name}'s ${g.token}">${g.icon} ${(U.tokens || {})[k] || 0}</span>`).join(" ")} <span class="foot">Token power: <b>+${tokenPower()}%</b> on all leaderboard points. Win tokens in rare Trials during level rounds.</span></p>
   ${wk.t >= 5 ? `<p class="foot weekline"><b>This week:</b> ${wk.pct}% right on ${wk.t} answers${wk.prev != null ? ` (last week ${wk.prev}%${wk.pct > wk.prev ? ", up " + (wk.pct - wk.prev) + " points" : ""})` : ""}.</p>` : ""}
   ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
   ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"} · ${PTS.week} this week</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
@@ -371,6 +401,8 @@ const GODS = {
   hephaestus: { name: "Hephaestus", token: "hammer", icon: "🔨", domain: "well-built sentences" },
   zeus: { name: "Zeus", token: "thunderbolt", icon: "⚡", domain: "the hardest questions" }
 };
+const tokenCount = () => Object.values(U.tokens || {}).reduce((a, b) => a + b, 0);
+const tokenPower = () => Math.min(tokenCount(), 10) * 2;
 function godFor(q) {
   if (q.lvl === 3 || q.lvl === 5) return "hermes";
   if (q.lvl === 6) return ["A", "X"].includes(q.tag) ? "athena" : "apollo";
@@ -380,7 +412,7 @@ function godFor(q) {
 }
 function maybeTrial(k) {
   S.trial = null;
-  if (Math.random() >= 5 / 12) return;
+  if (Math.random() >= 0.2) return;
   const tl = Math.min(k + 2, LV.length - 1), i = 1 + Math.floor(Math.random() * 3);
   const pool = shuffle(LV[tl].q.filter(q => q.type === "mc" && !S.round.includes(q.id)).map(q => q.id)); if (!pool.length) return;
   const id = pool[0], alt = S.round[i];
@@ -389,7 +421,7 @@ function maybeTrial(k) {
 function trialOffer() {
   const g = GODS[S.trial.god], q = BYID[S.trial.id], have = (U.tokens || {})[S.trial.god] || 0;
   $("card").innerHTML = `<div class="trial"><span class="pill gold">${g.icon} An Olympian Trial</span><p class="prompt">${g.name} offers you a trial.</p>
-  <p class="lead">A harder question from Level ${q.lvl + 1}, on ${esc(g.domain)}. Answer it right for <b>triple points</b> and ${g.name}'s ${g.token}.${have ? ` You have ${have} so far.` : ""}</p>
+  <p class="lead">A harder question from Level ${q.lvl + 1}, on ${esc(g.domain)}. Answer it right for <b>triple points</b> and ${g.name}'s ${g.token}. Every token adds <b>+2%</b> to all your leaderboard points from then on (up to +20%).${have ? ` You have ${have} so far.` : ""}</p>
   <p class="foot">Missing a trial never breaks your streak. Saying no gives you a regular question instead.</p>
   <div class="row"><button class="btn brass" id="tAcc">Accept the trial</button><button class="btn ghost" id="tDec">Not today</button></div></div>`;
   $("tAcc").onclick = () => { S.trial.accepted = true; fresh(); render(); };
@@ -506,7 +538,7 @@ function render() {
     if (S.sure === true && !ok) h += `<div class="fb tip"><h3>Confident miss</h3><p>You were sure, and it was wrong. These are the mistakes that stick best once corrected, so it goes into your review queue.</p></div>`;
     if (S.sure === false && ok) h += `<p class="foot">Right, but you weren't sure. It will come back once in review to lock it in.</p>`;
     if (stretchQ && !ok) h += `<p class="foot">Stretch questions don't break your streak.</p>`;
-    if (trialQ) { const g = GODS[S.trial.god]; h += ok ? `<div class="fb trialwin"><h3>${g.icon} You passed ${g.name}'s trial.</h3><p>You earned ${g.name}'s ${g.token}. You now have ${(U.tokens || {})[S.trial.god] || 1}.</p></div>` : `<p class="foot">Trials are meant to be hard. Your streak is safe, and this question goes to your review queue.</p>`; }
+    if (trialQ) { const g = GODS[S.trial.god]; h += ok ? `<div class="fb trialwin"><h3>${g.icon} You passed ${g.name}'s trial.</h3><p>You earned ${g.name}'s ${g.token}. Token power is now +${tokenPower()}% on every leaderboard point you score.</p></div>` : `<p class="foot">Trials are meant to be hard. Your streak is safe, and this question goes to your review queue.</p>`; }
     h += `<div class="report"><button class="link small" id="rep">Something wrong with this question? Report it</button><div id="repBox"></div></div>`;
     if (main && !ok && !trialQ) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson, one practice question, and one writing task on this skill, then back to the climb. This question also goes into your review queue.</p></div>`;
   }
@@ -571,9 +603,10 @@ function act() {
       else { if (!stretch) { S.lostStreak = U.streak; U.streak = 0; } addReview(q.id, S.sure === true); shake(); }
       const i = S.qi, resp = S.sel, declined = !!(S.trial && S.trial.i === i && S.trial.accepted === false);
       (S.served[i] || Promise.resolve(null)).then(id => id ? api("/round/answer", { ...AUTH, roundId: id, i, response: resp, declined }) : null).then(r => {
-        if (!r) return; PTS = { week: r.weekPts, all: r.allPts }; S.roundPts = r.roundPts; if (typeof r.astreak === "number") { U.streak = r.astreak; U.bestStreak = Math.max(U.bestStreak || 0, r.bestStreak || 0); save(); }
+        if (!r) return; PTS = { week: r.weekPts, all: r.allPts }; S.roundPts = r.roundPts;
+        if (r.finished) { U.pb = U.pb || {}; if ((r.roundPts || 0) > (U.pb.roundPts || 0)) { S.newPB = U.pb.roundPts > 0; U.pb.roundPts = r.roundPts; save(); } } if (typeof r.astreak === "number") { U.streak = r.astreak; U.bestStreak = Math.max(U.bestStreak || 0, r.bestStreak || 0); save(); }
         if (r.points + r.bonus > 0) floatUp(`+${r.points + r.bonus} pts`, "pts");
-        stats(); if ($("rpts")) $("rpts").textContent = `${r.roundPts} leaderboard points this round`;
+        stats(); if ($("rpts")) $("rpts").textContent = `${r.roundPts} leaderboard points this round${r.finished && S.newPB ? " · a new personal best!" : ""}`;
       }).catch(() => {});
     } else { if (ok) gain(3); else shake(); }
     save(); render(); return;
@@ -594,6 +627,7 @@ function back() { S.mode = "q"; advance(); }
 function advance() {
   if (S.qi < 4) { S.qi++; fresh(); render(); return; }
   S.mode = "done"; const sc = S.res.filter(Boolean).length;
+  S.prevBest = U.best[S.lvl]; S.newPB = false;
   if (U.best[S.lvl] == null || sc > U.best[S.lvl]) U.best[S.lvl] = sc;
   if (sc >= 4) gain(25);
   markDay(); save(); render();
@@ -606,7 +640,7 @@ function done() {
   S.failTag = worst ? worst[0] : null;
   const coach = !pass && (best.length || worst) ? `${best.length ? `You were solid on ${esc(best.join(" and ").toLowerCase())}. ` : ""}${worst ? `Next skill to work on: ${esc(L.skills[worst[0]].toLowerCase())}.` : ""}` : "";
   $("card").innerHTML = `<div class="top"><span class="pill">Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${esc(L.t)}</span></div><p class="big">${sc} / 5</p>${AUTH && ONLINE ? `<p class="lead" id="rpts">${S.roundPts ? S.roundPts + " leaderboard points this round" : "Tallying points…"}</p>` : ""}
-  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : (sc === 3 ? "Almost there. Four correct clears the level." : "Good practice. Four correct clears the level.")}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : `Your progress is saved. ${coach} A fresh mix of questions is ready when you are.`}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
+  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : (sc === 3 ? "Almost there. Four correct clears the level." : "Good practice. Four correct clears the level.")}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : `Your progress is saved. ${coach} A fresh mix of questions is ready when you are.`}${S.prevBest != null && sc > S.prevBest ? ` That beats your best here of ${S.prevBest}/5.` : ""}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
   ${S.trial && S.trial.won ? `<div class="fb trialwin"><h3>${GODS[S.trial.god].icon} ${GODS[S.trial.god].name}'s ${GODS[S.trial.god].token} ${GODS[S.trial.god].plural ? "are" : "is"} yours.</h3><p>You passed an Olympian Trial this round.</p></div>` : ""}
   ${missed.length ? `<div class="fb lesson"><h3>Worth another look</h3><p>${missed.map(esc).join("<br>")}</p></div>` : ""}
   <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to ${PLACES[S.lvl + 1]}</button>` : ""}${!pass && S.failTag ? `<button class="btn brass" id="fdrill">Drill ${esc(L.skills[S.failTag].toLowerCase())}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;

@@ -193,7 +193,8 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const elapsedMs = now() - r.served[i];
       let pts = 0;
       const stretch = q.lvl !== r.lvl, trialOn = isTrial && !declined;
-      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, r.calm ? "fix" : q.type); if (trialOn) pts *= 3; else if (stretch) pts = Math.round(pts * 1.5); }
+      const power = 1 + Math.min(u.trials || 0, 10) * 0.02;
+      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, r.calm ? "fix" : q.type); if (trialOn) pts *= 3; else if (stretch) pts = Math.round(pts * 1.5); pts = Math.round(pts * power); if (trialOn) u.trials = (u.trials || 0) + 1; }
       else { r.streak = 0; if (!stretch) u.astreak = 0; }
       u.bestStreak = Math.max(u.bestStreak || 0, u.astreak || 0);
       await users.setJSON(key, u);
@@ -204,7 +205,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       r.pts += pts + bonus;
       if (finished) await rounds.delete(rid); else await rounds.setJSON(rid, r);
       if (pts + bonus > 0 || finished) await addPts(u.name, pts + bonus, finished);
-      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, astreak: u.astreak || 0, bestStreak: u.bestStreak || 0, stretch, trial: trialOn, ...(await totals()) });
+      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, astreak: u.astreak || 0, bestStreak: u.bestStreak || 0, stretch, trial: trialOn, trials: u.trials || 0, power, ...(await totals()) });
     }
 
     // ---- Daily Five: shared daily set, kept off the leaderboard ----

@@ -227,5 +227,8 @@ console.log("All server tests passed.");
   const acc = await play(false), dec = await play(true);
   assert.equal(acc.trial, true); assert.equal(dec.trial, false);
   assert.ok(acc.points > dec.points * 3, "accepted trial pays triple at the higher level");
+  assert.equal(acc.trials, 1, "server counts trial wins"); 
+  const acc2 = await play(false);
+  assert.equal(acc2.trials, 2); assert.ok(Math.abs(acc2.power - 1.02) < 1e-9, "token power applies from earlier wins");
   console.log("V10 server tests passed. trial pts", acc.points, "declined pts", dec.points);
 }
