@@ -17,7 +17,7 @@ export const LAB = [
 // Level 3
 [{type:"order",p:"Join “I sent the memo” and “Nobody replied” with a semicolon.",tiles:["I","sent","the","memo",";",",","nobody","replied","."],acc:["I sent the memo; nobody replied."],e:"A semicolon can join two full sentences. A comma alone can't.",tag:"J"},
  {type:"order",p:"Place the commas around the extra information.",tiles:["Dana",",","our","new","analyst",",","starts","Monday","."],acc:["Dana, our new analyst, starts Monday."],e:"“Our new analyst” is extra, so commas go on both sides.",tag:"C"},
- {type:"order",p:"Introduce the list with a colon.",tiles:["Bring","three","things",":","a","pen",",","a","badge",",","and","a","laptop","."],acc:["Bring three things: a pen, a badge, and a laptop."],e:"A colon after a full sentence introduces a list.",tag:"P"},
+ {type:"order",p:"Introduce the list with a colon.",tiles:["Bring","three","things",":","a","pen",",","a","badge",",","and","a","laptop","."],acc:["Bring three things: a pen, a badge, and a laptop.","Bring three things: a pen, a badge and a laptop."],e:"A colon after a full sentence introduces a list. The comma before “and” (the serial comma) is a style choice: Chicago uses it, AP usually doesn't.",tag:"P"},
  {type:"multi",p:"Tap the 3 apostrophe mistakes.",s:["Its","time","to","review","the","clients","files,","and","the","firm","updated","it's","website."],a:[0,5,11],fixes:["It's","clients'","its"],e:"“It's” means it is. Plural ownership adds an apostrophe after the s. Possessive “its” has none.",tag:"A"}],
 // Level 4
 [{type:"order",p:"Build the sentence with the right pronoun.",tiles:["Please","send","the","file","to","Jo","and","me","I","."],acc:["Please send the file to Jo and me."],e:"Drop “Jo and”: “send the file to me.”",tag:"P"},
