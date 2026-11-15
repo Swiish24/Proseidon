@@ -1,7 +1,7 @@
 // Proseidon server logic: accounts, scored rounds, leaderboard.
 // Storage is injected so this file can be tested without Netlify.
 import crypto from "node:crypto";
-import { LV, BYID, check, points, rankFor } from "../../../public/bank.js";
+import { LV, BYID, check, points, rankFor, dailyIds } from "../../../public/bank.js";
 
 const ROUND_TTL = 60 * 60e3;
 const LOCK_AFTER = 10;
@@ -24,7 +24,7 @@ export function isoWeek(d) {
 }
 
 export async function handle(req, store, now = () => Date.now(), opts = {}) {
-  const users = store("users"), rounds = store("rounds"), scores = store("scores"), feedback = store("feedback"), stats = store("stats");
+  const users = store("users"), rounds = store("rounds"), scores = store("scores"), feedback = store("feedback"), stats = store("stats"), daily = store("daily");
   const admins = String(opts.admins || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/(\.netlify\/functions\/)?api\/?/, "").replace(/\/$/, "");
@@ -136,7 +136,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const correct = check(q, b.response);
       const elapsedMs = now() - r.served[i];
       let pts = 0;
-      if (correct) { r.streak += 1; r.right += 1; pts = points(r.lvl, elapsedMs, r.streak); } else r.streak = 0;
+      if (correct) { r.streak += 1; r.right += 1; pts = points(r.lvl, elapsedMs, r.streak, q.type); } else r.streak = 0;
       await tally(q.id, correct);
       r.i += 1;
       const finished = r.i === 5;
@@ -145,6 +145,29 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       if (finished) await rounds.delete(rid); else await rounds.setJSON(rid, r);
       if (pts + bonus > 0 || finished) await addPts(u.name, pts + bonus, finished);
       return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, ...(await totals()) });
+    }
+
+    // ---- Daily Five: shared daily set, kept off the leaderboard ----
+    const okDate = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && Math.abs(Date.parse(d + "T12:00:00Z") - now()) < 2.5 * 864e5;
+    const emptyDay = () => ({ n: 0, right: [0, 0, 0, 0, 0], dist: [0, 0, 0, 0, 0, 0] });
+    if (path === "daily/stats" && req.method === "POST") {
+      if (!okDate(b.date)) return json({ error: "Bad date." }, 400);
+      const ids = dailyIds(b.date), day = (await daily.get(b.date, { type: "json" })) || emptyDay(), all = {};
+      for (const id of ids) { const r = await stats.get(id, { type: "json" }); if (r) all[id] = { n: r.n, right: r.n - r.miss }; }
+      return json({ ids, day, all });
+    }
+    if (path === "daily/submit" && req.method === "POST") {
+      const [u, err] = await auth(); if (err) return err;
+      if (!okDate(b.date)) return json({ error: "Bad date." }, 400);
+      const res = Array.isArray(b.res) ? b.res : [];
+      if (res.length !== 5 || !res.every(x => typeof x === "boolean")) return json({ error: "Bad results." }, 400);
+      const mark = `${b.date}/u/${key}`;
+      const day = (await daily.get(b.date, { type: "json" })) || emptyDay();
+      if (await daily.get(mark, { type: "json" })) return json({ ok: true, repeat: true, day });
+      day.n += 1; res.forEach((ok, k) => { if (ok) day.right[k] += 1; }); day.dist[res.filter(Boolean).length] += 1;
+      await daily.setJSON(b.date, day);
+      await daily.setJSON(mark, { at: now(), score: res.filter(Boolean).length, ms: Math.max(0, Math.min(Number(b.ms) || 0, 36e5)) });
+      return json({ ok: true, day });
     }
 
     if (path === "feedback" && req.method === "POST") {

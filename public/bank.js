@@ -1,5 +1,6 @@
 // Proseidon question bank. Shared by the game and the server.
 import { WN, ADD, FIX } from "./bank-v5.js";
+import { EDIT, MORE } from "./bank-v6.js";
 const RAW=[
 {t:"Parts of speech",l:"Every word has a job. Nouns name things. Verbs show action or being. Adjectives describe nouns. Adverbs describe verbs, adjectives, or other adverbs. Pronouns stand in for nouns. Prepositions show position or relation (under, to, after). Conjunctions join (and, but, so). Interjections show feeling (wow). The same word can do different jobs in different sentences.",q:[
 ["Which word is a pronoun? “She handed the report to Mark.”",["handed","report","She","to"],2,"“She” stands in for a person's name."],
@@ -208,12 +209,13 @@ export const PLACE_LV=[1,3,5,7,9];
 // ADD = extra multiple-choice questions [prompt, options, answer index, explanation, wrong notes, skill tag],
 // FIX = rewrite drills.
 
-const mcq=(i,id,r,w,tag)=>({id,lvl:i,type:"mc",p:r[0],o:r[1],a:r[2],e:r[3],w:w||null,tag});
+const mcq=(i,id,r,w,tag)=>{const x=EDIT[id];if(x){r=x;w=x[4]}return{id,lvl:i,type:"mc",p:r[0],o:r[1],a:r[2],e:r[3],w:w||null,tag}};
 export const LV=RAW.map((L,i)=>({t:L.t,l:L.l,skills:SK[i].names,q:[
   ...L.q.map((r,j)=>mcq(i,`${i}-${j}`,r,(WN[i]||[])[j],SK[i].tags[j])),
   ...EXTRA[i].map((x,j)=>({id:`${i}-x${j}`,lvl:i,...x})),
   ...(ADD[i]||[]).map((r,j)=>mcq(i,`${i}-a${j}`,r,r[4],r[5])),
-  ...(FIX[i]||[]).map((x,j)=>({id:`${i}-f${j}`,lvl:i,type:"fix",...x}))]}));
+  ...(FIX[i]||[]).map((x,j)=>({id:`${i}-f${j}`,lvl:i,type:"fix",...x})),
+  ...(MORE[i]||[]).map((x,j)=>({id:`${i}-m${j}`,lvl:i,...x}))]}));
 export const BYID={};LV.forEach(L=>L.q.forEach(q=>{BYID[q.id]=q}));
 const norm=s=>String(s==null?"":s).trim().toLowerCase().replace(/[’‘]/g,"'").replace(/[.!?]+$/,"");
 const flat=s=>" "+String(s==null?"":s).toLowerCase().replace(/[’‘]/g,"'").replace(/[“”"]/g,"").replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim()+" ";
@@ -233,7 +235,8 @@ export function fixIssues(q,r){
 }
 export function check(q,r){if(q.type==="type")return q.acc.some(a=>norm(a)===norm(r));if(q.type==="fix")return fixIssues(q,r).length===0;return Number(r)===q.a}
 export function answerText(q){if(q.type==="fix")return q.model;return q.type==="mc"?q.o[q.a]:q.type==="tap"?(q.fix?`${q.s[q.a].replace(/[.,]$/,"")} should be “${q.fix}”`:q.s[q.a].replace(/[.,]$/,"")):q.acc[0]}
-export function points(level,elapsedMs,streak){const base=10*(level+1);const sec=elapsedMs/1000;const speed=sec<1?0:Math.max(0,1-sec/20)*0.5;const mult=1+0.1*Math.min(Math.max(streak-1,0),4);return Math.round(base*(1+speed)*mult)}
+// Rewrite drills take time to type, so they get a flat bonus instead of a fading speed bonus.
+export function points(level,elapsedMs,streak,type){const base=10*(level+1);const sec=elapsedMs/1000;const speed=type==="fix"?0.25:sec<1?0:Math.max(0,1-sec/20)*0.5;const mult=1+0.1*Math.min(Math.max(streak-1,0),4);return Math.round(base*(1+speed)*mult)}
 export const ARENA=[
 {id:"a1",title:"The missed deadline",concept:"Past, present, or future",setup:"A coworker missed the monthly report deadline again. You want it on time next month.",moves:[["“You always miss this deadline.”",0,"They get defensive and list excuses. You're now arguing about the past, which can't change."],["“What would help you hit the 5th next month?”",3,"They name a bottleneck and you fix it together. Talking about the future turns blame into a choice."],["“Our team really values reliability.”",1,"They agree in general, but nothing changes. Values talk builds agreement, not action."]],lesson:"Arguments about the past assign blame. Arguments about the present affirm values. Arguments about the future decide choices. To change behavior, argue in the future tense."},
 {id:"a2",title:"Five minutes with the CEO",concept:"Read the room",setup:"You get a five-minute slot to pitch a new review tool to the CEO.",moves:[["Walk through every feature and setting.",0,"The CEO checks the clock by minute two. Too much detail for this audience."],["“It cuts review time in half and lowers our risk of fines.”",3,"The CEO leans in and asks about cost. You matched the message to what this listener cares about."],["Open with three jokes to warm up the room.",1,"A laugh, then a glance at the clock. Friendly, but it spent your scarce time."]],lesson:"Fit your words to the audience and setting. The best argument for one listener can fall flat with another."},
@@ -250,3 +253,8 @@ export const ARENA=[
 export const PLACES=["The Sea Floor","The Kelp Forest","The Reef","The Shallows","The Shore","The Harbor","The Agora","The Hills","The Temple","Olympus"];
 export const RANKS=[["Deckhand",0],["Sailor",500],["Navigator",1500],["Captain",4000],["Admiral",10000],["Triton",25000],["Poseidon",50000]];
 export function rankFor(pts){let i=0;RANKS.forEach((r,k)=>{if(pts>=r[1])i=k});return{name:RANKS[i][0],min:RANKS[i][1],next:RANKS[i+1]?{name:RANKS[i+1][0],at:RANKS[i+1][1]}:null}}
+
+// Daily Five: the same five multiple-choice questions for everyone on a given date, easy to hard.
+export const DAILY_LV=[0,2,4,6,9];
+const fnv=t=>{let h=2166136261;for(const c of t){h^=c.charCodeAt(0);h=Math.imul(h,16777619)>>>0}return h};
+export function dailyIds(date){return DAILY_LV.map(l=>{const ids=LV[l].q.filter(q=>q.type==="mc").map(q=>q.id);return ids[fnv(date+"|"+l)%ids.length]})}

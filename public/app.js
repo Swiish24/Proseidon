@@ -1,4 +1,4 @@
-import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues } from "./bank.js";
+import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues, dailyIds } from "./bank.js";
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
@@ -20,7 +20,7 @@ try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); if (d && d.user
 let U = null, AUTH = null, ONLINE = false, ADMIN = false, PTS = { week: 0, all: 0 };
 const S = { mode: "loading", lvl: 0, round: [], qi: 0, res: [], prac: [], pi: 0, sel: null, typed: "", answered: false, pq: [], pres: [], hint: false, order: [0, 1, 2, 3], set: null, rp: null, served: {}, qStart: {}, roundPts: 0, arena: null, lb: "week" };
 
-function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, updatedAt: 0 }; }
+function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, d5: null, updatedAt: 0 }; }
 function fill(p) { const b = blank(p.name); for (const k in b) if (p[k] == null) p[k] = b[k]; return p; }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
 let syncTimer = null;
@@ -166,7 +166,10 @@ function home() { S.mode = "home"; render(); }
 function homeView() {
   const d = U.daily, done = d.last === today(), due = dueIds().length, weak = weakSpots()[0];
   const rk = rankFor(PTS.all), tideDone = U.tide === today();
+  const d5 = d5Today(), allDone = d5 && tideDone;
   $("card").innerHTML = `<span class="pill">The Harbor · Home</span>
+  ${allDone ? `<div class="fb ok donefor"><h3>That's today.</h3><p>The Daily Five and your Tide are both done. Come back tomorrow for new ones. Extra practice is always open, but your daily work is finished.</p></div>` : ""}
+  <div class="tidecard d5card ${d5 ? "done" : ""}"><div><span class="lbl">Daily Five · same five for everyone</span><b>${d5 ? `${d5.res.filter(Boolean).length} / 5 today &nbsp;${squares(d5.res)}` : "5 questions · easy to hard"}</b><span class="foot">${d5 ? "A new Daily Five arrives tomorrow." : "Everyone plays the same five today, so you can compare with friends."}</span></div><button class="btn ${d5 ? "ghost" : "brass"}" id="d5">${d5 ? "See and share" : "Play the Daily Five"}</button></div>
   <div class="tidecard ${tideDone ? "done" : ""}"><div><span class="lbl">Today's Tide</span><b>${tideDone ? "Done for today" : "5 questions · about 3 minutes"}</b><span class="foot">${tideDone ? "Nice work. A new Tide rolls in tomorrow. Extra practice is always open." : "A mix of your review questions and your current level. Counts toward your daily goal."}</span></div><button class="btn ${tideDone ? "ghost" : "brass"}" id="tide">${tideDone ? "Play it again" : "Start today's Tide"}</button></div><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
   ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"}</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
   <div class="grid2">
@@ -179,6 +182,7 @@ function homeView() {
   <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="ar">Enter the Agora</button></div>`;
   $("go").onclick = () => start(S.lvl);
   $("tide").onclick = startTide;
+  $("d5").onclick = startDaily;
   if ($("rv")) $("rv").onclick = startReview;
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
   $("ar").onclick = () => { S.mode = "arena"; render(); };
@@ -291,6 +295,7 @@ function render() {
   if (S.mode === "inbox") return inboxView();
   if (S.mode === "done") return done();
   if (S.mode === "setdone") return setDone();
+  if (S.mode === "d5done") return dailyDone();
   const L = LV[S.lvl];
   if (S.mode === "lesson") {
     c.innerHTML = `<div class="top"><span class="pill scenic">Scenic route · ${esc(L.t)}</span></div><div class="fb lesson"><h3>Quick lesson</h3><p>${esc(L.l)}</p></div><div class="row"><button class="btn brass" id="go">Try 2 practice questions</button><button class="btn ghost" id="skipd">Skip the detour</button></div>`;
@@ -302,7 +307,7 @@ function render() {
   if (main || pl || set) { const arr = pl ? S.pres : set ? S.set.res : S.res, n = set ? S.set.ids.length : 5, cur = set ? S.set.i : S.qi; dots = `<div class="dots" aria-label="Question ${cur + 1} of ${n}">${Array.from({ length: n }, (_, k) => `<span class="dot ${arr[k] === true ? "ok" : arr[k] === false ? "bad" : k === cur ? "now" : ""}"></span>`).join("")}</div>`; }
   const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : `Scenic route · practice ${S.pi + 1} of 2`;
   let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(label)}</span>${dots}</div>`;
-  if (main && AUTH && ONLINE && !S.answered) { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
+  if (main && AUTH && ONLINE && !S.answered && q.type !== "fix") { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
   h += questionBody(q) + `<p class="err" id="err"></p>`;
   if (S.hint && main && !S.answered) h += `<div class="fb tip"><h3>Coach's tip</h3><p>${esc(L.l)}</p></div>`;
   if (S.answered) {
@@ -321,6 +326,7 @@ function render() {
       }
     }
     h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}</h3>${body}</div>`;
+    if (set && S.set.kind === "daily") h += `<p class="foot dpct">${esc(dailyPct(q.id, S.set.i))}</p>`;
     h += `<div class="report"><button class="link small" id="rep">Something wrong with this question? Report it</button><div id="repBox"></div></div>`;
     if (main && !ok) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson and two practice questions, then back to the climb. This question also goes into your review queue.</p></div>`;
   }
@@ -367,7 +373,7 @@ function act() {
     save(); render(); return;
   }
   if (pl) { if (S.qi < 4) { S.qi++; fresh(); } else S.mode = "placed"; render(); return; }
-  if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
+  if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else if (S.set.kind === "daily") { finishDaily(); return; } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
   if (main) { if (check(q, S.sel)) advance(); else { S.prac = draw(S.lvl, 2, S.round); save(); S.mode = "lesson"; render(); } return; }
   if (S.pi < 1) { S.pi++; fresh(); render(); } else back();
 }
@@ -392,12 +398,55 @@ function done() {
 }
 function setDone() {
   const st = S.set, sc = st.res.filter(Boolean).length;
-  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? "Today's Tide is done. +15 XP bonus. Come back tomorrow for a fresh set, or keep playing now." : st.kind === "review" ? (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
+  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? (d5Today() ? "That's today. Your Tide and the Daily Five are both done. +15 XP bonus. See you tomorrow." : "Today's Tide is done. +15 XP bonus. The Daily Five is still waiting.") : st.kind === "review" ? (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
   $("hm").onclick = home; $("ws").onclick = () => { S.mode = "weak"; render(); }; $("hm").focus();
 }
 
 
 /* ---------- V5: Daily Tide, reports, stats, admin ---------- */
+/* ---------- Daily Five ---------- */
+function d5Today() { return U.d5 && U.d5.date === today() ? U.d5 : null; }
+function squares(res) { return res.map(x => x ? "🟩" : "🟥").join(""); }
+function startDaily() {
+  if (d5Today()) { S.mode = "d5done"; S.d5day = S.d5day || null; render(); loadDaily(); return; }
+  S.set = { kind: "daily", title: "Daily Five", ids: dailyIds(today()), i: 0, res: [], t0: Date.now() };
+  S.dstats = null; loadDaily(); S.mode = "set"; fresh(); render();
+}
+function loadDaily() {
+  if (!ONLINE) return;
+  api("/daily/stats", { date: today() }).then(r => { S.dstats = r; S.d5day = r.day; if (S.mode === "d5done") render(); }).catch(() => {});
+}
+function dailyPct(qid, k) {
+  const st = S.dstats; if (!st) return "";
+  if (st.day && st.day.n >= 3) return `${Math.round(100 * st.day.right[k] / st.day.n)}% of today's players got this one right.`;
+  const a = st.all && st.all[qid]; if (a && a.n >= 5) return `${Math.round(100 * a.right / a.n)}% of players have gotten this one right.`;
+  return "You're one of the first to answer this one today.";
+}
+function finishDaily() {
+  const res = S.set.res.map(Boolean), ms = Date.now() - S.set.t0;
+  U.d5 = { date: today(), res, ms }; gain(10); markDay(); save();
+  S.mode = "d5done"; render();
+  if (ONLINE && AUTH) api("/daily/submit", { ...AUTH, date: U.d5.date, res, ms }).then(r => { S.d5day = r.day; if (S.mode === "d5done") render(); }).catch(() => {});
+}
+const mmss = ms => { const t = Math.round(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+function shareText(d) { return `Proseidon Daily Five ${d.date}\n${squares(d.res)}  ${d.res.filter(Boolean).length}/5 · ${mmss(d.ms)}\n${location.origin}`; }
+function dailyDone() {
+  const d = d5Today(); if (!d) return home();
+  const sc = d.res.filter(Boolean).length, day = S.d5day;
+  let beat = "";
+  if (day && day.n >= 3) { const atOrBelow = day.dist.slice(0, sc + 1).reduce((a, b) => a + b, 0); beat = `You scored as well as or better than ${Math.round(100 * atOrBelow / day.n)}% of today's ${day.n} players.`; }
+  const tideDone = U.tide === today();
+  $("card").innerHTML = `<span class="pill scenic">Daily Five · ${esc(d.date)}</span><p class="big">${sc} / 5</p><p class="lead" style="font-size:28px;letter-spacing:4px">${squares(d.res)}</p><p class="lead">Time ${mmss(d.ms)}.${beat ? " " + beat : ""}</p>
+  <div class="fb ${tideDone ? "ok" : "tip"}"><h3>${tideDone ? "That's today." : "Daily Five done."}</h3><p>${tideDone ? "Your Daily Five and Tide are both done. A new Daily Five arrives tomorrow." : "Your Tide is still open: five questions picked for you."}</p></div>
+  <div class="row"><button class="btn brass" id="share">Share result</button>${tideDone ? "" : `<button class="btn" id="tide">Start today's Tide</button>`}<button class="btn ghost" id="hm">Back to home</button></div><p class="foot" id="shareMsg"></p>`;
+  $("share").onclick = async () => {
+    const t = shareText(d);
+    try { if (navigator.share) { await navigator.share({ text: t }); return; } await navigator.clipboard.writeText(t); $("shareMsg").textContent = "Copied. Paste it anywhere. It doesn't give away the answers."; }
+    catch (e) { $("shareMsg").textContent = t; }
+  };
+  if ($("tide")) $("tide").onclick = startTide;
+  $("hm").onclick = home; $("share").focus();
+}
 function startTide() {
   const due = dueIds().slice(0, 3);
   const fill = draw(S.lvl, 5 - due.length, due);

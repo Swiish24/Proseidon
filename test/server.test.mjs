@@ -128,3 +128,25 @@ console.log("All server tests passed.");
   assert.ok(inbox.items.some(x => x.kind === "report" && x.qid === "0-1"), "report in inbox");
   console.log("V5 server tests passed.");
 }
+// V6: Daily Five
+{
+  const { dailyIds, points } = await import("../public/bank.js");
+  const call4 = async (path, body) => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now); return { status: res.status, ...(await res.json()) }; };
+  const date = new Date(now()).toISOString().slice(0, 10);
+  const ids = dailyIds(date);
+  assert.equal(ids.length, 5); assert.deepEqual(ids, dailyIds(date), "same set for everyone");
+  assert.notDeepEqual(ids, dailyIds("2020-01-02"), "changes by day");
+  assert.ok(ids.every((id, k) => BYID[id].type === "mc" && BYID[id].lvl === [0, 2, 4, 6, 9][k]), "easy to hard");
+  assert.equal((await call4("daily/stats", { date: "2001-01-01" })).status, 400, "far dates blocked");
+  const t = (await call4("login", { user: "Dan_W", pin: "1234" })).token;
+  assert.equal((await call4("daily/submit", { date, res: [true, true, false, true, true] })).status >= 400, true, "sign-in needed");
+  let r = await call4("daily/submit", { user: "Dan_W", token: t, date, res: [true, true, false, true, true], ms: 70000 });
+  assert.equal(r.day.n, 1); assert.deepEqual(r.day.right, [1, 1, 0, 1, 1]); assert.equal(r.day.dist[4], 1);
+  r = await call4("daily/submit", { user: "Dan_W", token: t, date, res: [false, false, false, false, false] });
+  assert.ok(r.repeat && r.day.n === 1, "one entry per player per day");
+  assert.equal((await call4("daily/submit", { user: "Dan_W", token: t, date, res: [1, 2] })).status, 400);
+  const st = await call4("daily/stats", { date });
+  assert.deepEqual(st.ids, ids); assert.equal(st.day.n, 1);
+  assert.equal(points(0, 15000, 1, "fix"), points(0, 1500, 1, "fix"), "drills have no time pressure");
+  console.log("V6 server tests passed.");
+}
