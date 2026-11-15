@@ -86,8 +86,9 @@ function map() {
 function tag(back) {
   const t = $("tag");
   if (!U) { t.textContent = "Climb ten levels of English, from parts of speech to PhD."; return; }
-  t.innerHTML = `${back ? "Welcome back, " : "Playing as "}<b>${esc(U.name)}</b>${AUTH && ONLINE ? ` · ${rankFor(PTS.all).name}` : ` <span class="off">offline</span>`} · <button class="link" id="sw">Switch player</button>`;
-  $("sw").onclick = () => { DB.current = null; U = null; AUTH = null; ADMIN = false; $("inboxT").hidden = true; persist(); S.mode = "welcome"; tag(); render(); };
+  if (isGuest()) { t.innerHTML = `Playing as a <b>guest</b> · <button class="link" id="sw">Sign in or create an account</button>`; }
+  else t.innerHTML = `${back ? "Welcome back, " : "Playing as "}<b>${esc(U.name)}</b>${AUTH && ONLINE ? ` · ${rankFor(PTS.all).name}` : ` <span class="off">offline</span>`} · <button class="link" id="sw">Switch player</button>`;
+  $("sw").onclick = () => { if (!isGuest()) DB.current = null; U = null; AUTH = null; ADMIN = false; $("inboxT").hidden = true; persist(); S.mode = "welcome"; tag(); render(); };
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); }
 function floatUp(text, cls) { const c = $("card"); requestAnimationFrame(() => { const x = document.createElement("div"); x.className = "xp " + (cls || ""); x.textContent = text; c.appendChild(x); setTimeout(() => x.remove(), 1200); }); }
@@ -98,6 +99,18 @@ function fresh() { S.sel = null; S.typed = ""; S.answered = false; S.sure = null
 function initState(q) { if (S.stateFor === q.id || S.answered) return; S.stateFor = q.id; S.tileOrder = q.tiles ? shuffle(q.tiles.map((_, i) => i)) : []; S.defOrder = q.pairs ? shuffle(q.pairs.map((_, i) => i)) : []; S.sel = ["order", "multi"].includes(q.type) ? [] : q.type === "match" ? q.pairs.map(() => null) : null; }
 
 /* ---------- account screens ---------- */
+// Guests can play everything on this device. An account adds cross-device saving and the leaderboard.
+const GUEST = "~guest";
+const isGuest = () => DB.current === GUEST;
+function guestId() { if (!DB.guestId) { DB.guestId = "g" + Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, "0")).join(""); persist(); } return DB.guestId; }
+function enterGuest(then) {
+  if (!DB.users[GUEST]) DB.users[GUEST] = { profile: blank("Guest"), token: null };
+  const p = fill(DB.users[GUEST].profile); DB.current = GUEST; U = p; AUTH = null; ADMIN = false; PTS = { week: 0, all: 0 }; $("inboxT").hidden = true;
+  refreshDaily(); S.lvl = U.lvl || 0; persist(); tag();
+  if (then) then(); else if (U.placed) home(); else { S.mode = "intro"; render(); }
+}
+// When a guest creates an account, their progress comes with them.
+function carryGuest(k, name) { const g = DB.users[GUEST]; if (isGuest() && g && !DB.users[k]) { DB.users[k] = { profile: { ...g.profile, name, updatedAt: Date.now() }, token: null }; delete DB.users[GUEST]; } }
 function enter(key, res, isNew) {
   const local = DB.users[key] && DB.users[key].profile;
   let p = res.profile;
@@ -111,12 +124,13 @@ function enter(key, res, isNew) {
   if (U.placed) home(); else { S.mode = "intro"; render(); }
 }
 function welcome(prefill) {
-  const others = Object.keys(DB.users);
+  const others = Object.keys(DB.users).filter(k => k !== GUEST);
   $("card").innerHTML = `<p class="big">Welcome aboard.</p><p class="lead">Proseidon is a game for sharper English. Climb ten levels, from parts of speech to PhD-level rhetoric, and compete on the leaderboard.</p>
   <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wordsmith.42" aria-describedby="nmHelp nmErr" value="${esc(prefill || "")}"><span class="foot" id="nmHelp">Letters, numbers, periods, hyphens, or underscores</span><p class="err" id="nmErr" role="alert"></p></div>
   ${ONLINE ? `<div class="field" style="max-width:160px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="••••" aria-describedby="pinErr"><p class="err" id="pinErr" role="alert"></p></div>` : ""}</div>
   <p class="err" id="err" role="alert"></p><div id="confirmNew"></div>
   <div class="row"><button class="btn" id="go">Continue</button></div>
+  <div class="fb tip guestbox"><h3>Just want to play?</h3><p>No account needed. Progress saves on this device. Make an account anytime to keep it across devices and join the leaderboard.</p><div class="row"><button class="btn brass" id="gD5">Play today's Daily Five</button><button class="btn ghost" id="gTide">Today's Tide</button><button class="btn ghost" id="gGo">Continue as a guest</button></div></div>
   ${others.length ? `<div class="field" style="max-width:none"><span class="lbl">Players on this device</span><div class="row">${others.map(k => `<button class="btn ghost small" data-k="${esc(k)}">${esc(DB.users[k].profile.name)}</button>`).join("")}</div></div>` : ""}
   <p class="foot">${ONLINE ? "New here? Pick a username and PIN. Returning? Enter yours to pick up on any device." : "Offline mode: progress saves in this browser only, and scores won't post to the leaderboard."}</p>`;
   const clearErrs = () => { ["err", "nmErr", "pinErr"].forEach(id => { if ($(id)) $(id).textContent = ""; }); ["nm", "pin"].forEach(id => { if ($(id)) $(id).classList.remove("wrong"); }); };
@@ -126,7 +140,7 @@ function welcome(prefill) {
     if (v.length < 3 || v.length > 20) return err("Usernames are 3 to 20 characters long.", "nm");
     if (/[^A-Za-z0-9_.-]/.test(v)) { const bad = [...new Set(v.match(/[^A-Za-z0-9_.-]/g))].map(c => c === " " ? "spaces" : `“${c}”`).join(", "); return err(`Usernames can't include ${bad}. Use letters, numbers, periods, hyphens, or underscores.`, "nm"); }
     if (!/^[A-Za-z0-9].*[A-Za-z0-9]$/.test(v)) return err("Start and end your username with a letter or number.", "nm");
-    if (!ONLINE) { if (!DB.users[k]) DB.users[k] = { profile: blank(v), token: null }; return enter(k, { name: DB.users[k].profile.name, profile: DB.users[k].profile }, !DB.users[k].profile.placed); }
+    if (!ONLINE) { carryGuest(k, v); if (!DB.users[k]) DB.users[k] = { profile: blank(v), token: null }; return enter(k, { name: DB.users[k].profile.name, profile: DB.users[k].profile }, !DB.users[k].profile.placed); }
     const pin = $("pin").value.trim();
     if (!/^\d{4}$/.test(pin)) return err("Your PIN must be exactly 4 numbers.", "pin");
     $("go").textContent = "Checking…";
@@ -136,12 +150,15 @@ function welcome(prefill) {
       if (e.status === 404) {
         err("");
         $("confirmNew").innerHTML = `<div class="fb tip"><h3>New player?</h3><p>No one has the username “${esc(v)}” yet. Create it with this PIN? Remember your PIN. You'll need it on other devices.</p><div class="row" style="margin-top:8px"><button class="btn brass" id="mk">Create player</button></div></div>`;
-        $("mk").onclick = async () => { try { enter(k, await api("/register", { user: v, pin }), true); } catch (e2) { err(e2.message); } };
+        $("mk").onclick = async () => { try { const res = await api("/register", { user: v, pin }); carryGuest(k, res.name); enter(k, res, !(DB.users[k] && DB.users[k].profile.placed)); } catch (e2) { err(e2.message); } };
         $("mk").focus();
       } else err(e.message, e.status === 401 ? "pin" : e.status === 400 ? "nm" : null);
     }
   };
   $("go").onclick = go;
+  $("gD5").onclick = () => enterGuest(startDaily);
+  $("gTide").onclick = () => enterGuest(startTide);
+  $("gGo").onclick = () => enterGuest();
   ["nm", "pin"].forEach(id => { if ($(id)) { $(id).onkeydown = e => { if (e.key === "Enter") go(); }; $(id).oninput = () => { clearErrs(); $("confirmNew").innerHTML = ""; }; } });
   document.querySelectorAll("[data-k]").forEach(b => b.onclick = async () => {
     const rec = DB.users[b.dataset.k];
@@ -151,9 +168,16 @@ function welcome(prefill) {
   });
   (prefill && $("pin") ? $("pin") : $("nm")).focus();
 }
+const GOALS = [["work", "Work writing"], ["school", "School"], ["personal", "Personal growth"]];
+function wireGoals(again) { document.querySelectorAll("[data-goal]").forEach(b => b.onclick = () => { U.goal = U.goal === b.dataset.goal ? null : b.dataset.goal; save(); again(); }); }
+const CONTEXT = { work: /\b(reports?|clients?|managers?|memos?|meetings?|deadlines?|teams?|office|emails?|reps?|audits?|vendors?|polic(y|ies)|invoices?|slides|board|analysts?|budgets?|launch|files?|CEO)\b/i, school: /\b(class|teachers?|essays?|homework|exams?|tests?|students?|school|professors?|papers?|lectures?|grades?)\b/i };
+// Prefer questions that match the player's goal, when there are enough to choose from.
+function byGoal(ids, n) { const re = U.goal && CONTEXT[U.goal]; if (!re) return ids.slice(0, n); const txt = id => { const q = BYID[id]; return [q.p, ...(q.o || []), ...(q.s || [])].join(" "); }; return ids.slice().sort((a, b) => re.test(txt(b)) - re.test(txt(a))).slice(0, n); }
 function intro() {
   const steps = [["1", "Quick assessment", "Five questions, each harder than the last, set your starting level."], ["2", "Climb and compete", "Clear a level with 4 of 5 right. Fast, correct answers on harder levels earn more leaderboard points."], ["3", "Learn from misses", "Misses open a short lesson and come back later in your review queue."], ["4", "Daily habit", "Finish one round a day to grow your streak. You get one free streak freeze each week."]];
-  $("card").innerHTML = `<span class="pill">How it works</span><p class="prompt">${esc(U.name)}, here's the plan.</p><div class="steps">${steps.map(s => `<div class="step"><span class="num">${s[0]}</span><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div><div class="row"><button class="btn" id="go">Start the assessment</button><button class="btn ghost" id="skip">Skip and start at Level 1</button></div>`;
+  $("card").innerHTML = `<span class="pill">How it works</span><p class="prompt">${isGuest() ? "Here's" : esc(U.name) + ", here's"} the plan.</p>
+  <div class="field goalq" style="max-width:none"><span class="lbl">What are you practicing for? (optional)</span><div class="row">${GOALS.map(g => `<button class="btn ghost small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join("")}</div><span class="foot">This tilts examples toward your kind of writing. You can change it on the home screen.</span></div><div class="steps">${steps.map(s => `<div class="step"><span class="num">${s[0]}</span><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div><div class="row"><button class="btn" id="go">Start the assessment</button><button class="btn ghost" id="skip">Skip and start at Level 1</button></div>`;
+  wireGoals(intro);
   $("go").onclick = startPlace; $("skip").onclick = () => { U.placed = true; start(0); }; $("go").focus();
 }
 function startPlace() { if (!U) return; S.pq = PLACE_LV.map(l => { const ids = LV[l].q.filter(q => q.type === "mc").map(q => q.id); return ids[Math.floor(Math.random() * ids.length)]; }); S.pres = []; S.qi = 0; S.mode = "place"; fresh(); save(); render(); }
@@ -172,6 +196,8 @@ function homeView() {
   const rk = rankFor(PTS.all), tideDone = U.tide === today();
   const d5 = d5Today(), allDone = d5 && tideDone;
   $("card").innerHTML = `<span class="pill">The Harbor · Home</span>
+  ${isGuest() ? `<div class="fb tip"><h3>Playing as a guest</h3><p>Your progress saves on this device. Create a free account to keep it everywhere and join the leaderboard. Your progress comes with you.</p><div class="row"><button class="btn brass" id="mkAcct">Create an account</button></div></div>` : ""}
+  ${!U.placed ? `<div class="fb lesson"><h3>Find your level</h3><p>Five quick questions place you at the right level.</p><div class="row"><button class="btn" id="doPlace">Take the assessment</button></div></div>` : ""}
   ${allDone ? `<div class="fb ok donefor"><h3>That's today.</h3><p>The Daily Five and your Tide are both done. Come back tomorrow for new ones. Extra practice is always open, but your daily work is finished.</p></div>` : ""}
   <div class="tidecard d5card ${d5 ? "done" : ""}"><div><span class="lbl">Daily Five · same five for everyone</span><b>${d5 ? `${d5.res.filter(Boolean).length} / 5 today &nbsp;${squares(d5.res)}` : "5 questions · easy to hard"}</b><span class="foot">${d5 ? "A new Daily Five arrives tomorrow." : "Everyone plays the same five today, so you can compare with friends."}</span></div><button class="btn ${d5 ? "ghost" : "brass"}" id="d5">${d5 ? "See and share" : "Play the Daily Five"}</button></div>
   <div class="tidecard ${tideDone ? "done" : ""}"><div><span class="lbl">Today's Tide</span><b>${tideDone ? "Done for today" : "5 questions · about 3 minutes"}</b><span class="foot">${tideDone ? "Nice work. A new Tide rolls in tomorrow. Extra practice is always open." : "A mix of your review questions and your current level. Counts toward your daily goal."}</span></div><button class="btn ${tideDone ? "ghost" : "brass"}" id="tide">${tideDone ? "Play it again" : "Start today's Tide"}</button></div><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
@@ -186,6 +212,7 @@ function homeView() {
   <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
   ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
   <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="mix">Mix look-alikes</button><button class="btn ghost" id="ar">Enter the Agora</button></div>
+  <p class="foot goalq">Practicing for: ${GOALS.map(g => `<button class="link small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join(" · ")}${U.goal ? "" : " (optional)"}</p>
   <p class="foot conf">Confidence check: <b>${U.conf ? "On" : "Off"}</b>. ${U.conf ? "You'll tap “sure” or “not sure” before checking." : "Turn it on to tap “sure” or “not sure” before checking. Confident mistakes get extra review."} <button class="link small" id="conf">${U.conf ? "Turn off" : "Turn on"}</button></p>`;
   $("go").onclick = () => start(S.lvl);
   $("tide").onclick = startTide;
@@ -194,6 +221,9 @@ function homeView() {
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
   $("ar").onclick = () => { S.mode = "arena"; render(); };
   $("mix").onclick = startMix;
+  wireGoals(render);
+  if ($("mkAcct")) $("mkAcct").onclick = () => $("sw").click();
+  if ($("doPlace")) $("doPlace").onclick = startPlace;
   $("conf").onclick = () => { U.conf = !U.conf; save(); render(); };
   if ($("skipup")) $("skipup").onclick = () => start(S.lvl + 1);
   $("go").focus();
@@ -308,7 +338,7 @@ function render() {
   stats(); map();
   const onb = ONB.includes(S.mode) || !U;
   $("map").style.display = onb ? "none" : ""; $("tiles").style.display = onb ? "none" : ""; $("tools").style.display = U ? "" : "none";
-  document.querySelectorAll("#tiles .tile").forEach(t => t.classList.toggle("on", t.dataset.view === S.mode || (t.dataset.view === "arena" && S.mode === "scene") || (t.dataset.view === "review" && S.mode === "set" && S.set && S.set.kind === "review")));
+  document.querySelectorAll("#tiles .tile").forEach(t => t.classList.toggle("on", t.dataset.view === S.mode || (t.dataset.view === "arena" && S.mode === "scene") || (t.dataset.view === "review" && S.mode === "set" && S.set && S.set.kind === "review") || (t.dataset.view === "d5" && (S.mode === "d5done" || (S.mode === "set" && S.set && S.set.kind === "daily"))) || (t.dataset.view === "tide" && S.mode === "set" && S.set && S.set.kind === "tide")));
   const c = $("card");
   if (S.mode === "loading") { c.innerHTML = `<p class="foot">Loading…</p>`; return; }
   if (S.mode === "welcome" || !U) return welcome();
@@ -492,7 +522,7 @@ function finishDaily() {
   const res = S.set.res.map(Boolean), ms = Date.now() - S.set.t0;
   U.d5 = { date: today(), res, ms }; gain(10); markDay(); save();
   S.mode = "d5done"; render();
-  if (ONLINE && AUTH) api("/daily/submit", { ...AUTH, date: U.d5.date, res, ms }).then(r => { S.d5day = r.day; if (S.mode === "d5done") render(); }).catch(() => {});
+  if (ONLINE) api("/daily/submit", { ...(AUTH || { guest: guestId() }), date: U.d5.date, res, ms }).then(r => { S.d5day = r.day; if (S.mode === "d5done") render(); }).catch(() => {});
 }
 const mmss = ms => { const t = Math.round(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 function shareText(d) { return `Proseidon Daily Five ${d.date}\n${squares(d.res)}  ${d.res.filter(Boolean).length}/5 · ${mmss(d.ms)}\n${location.origin}`; }
@@ -515,7 +545,7 @@ function dailyDone() {
 }
 function startTide() {
   const due = dueIds().slice(0, 3);
-  const fill = draw(S.lvl, 5 - due.length, due);
+  const fill = byGoal(draw(S.lvl, 10 - due.length, due), 5 - due.length);
   S.set = { kind: "tide", title: "Today's Tide", ids: shuffle(due.concat(fill)), i: 0, res: [] };
   S.mode = "set"; fresh(); save(); render();
 }
@@ -597,7 +627,7 @@ document.addEventListener("keydown", e => {
 });
 document.querySelectorAll("#tiles .tile").forEach(t => t.onclick = () => {
   if (!U) return; const v = t.dataset.view;
-  if (v === "home") home(); else if (v === "review") startReview(); else { S.mode = v; render(); }
+  if (v === "home") home(); else if (v === "review") startReview(); else if (v === "d5") startDaily(); else if (v === "tide") startTide(); else { S.mode = v; render(); }
 });
 $("rateT").onclick = openFb; $("retake").onclick = startPlace; $("inboxT").onclick = () => { if (ADMIN) { S.mode = "inbox"; render(); } };
 $("reset").onclick = () => {
@@ -610,6 +640,7 @@ $("reset").onclick = () => {
   render();
   try { await api("/health"); ONLINE = true; } catch (e) { ONLINE = false; }
   const k = DB.current, rec = k && DB.users[k];
+  if (k === GUEST && rec) return enterGuest();
   if (rec) {
     if (ONLINE && rec.token) { try { return enter(k, await api("/login", { user: rec.profile.name, token: rec.token }), false); } catch (e) { S.mode = "welcome"; tag(); render(); return welcome(rec.profile.name); } }
     if (!ONLINE) return enter(k, { name: rec.profile.name, profile: rec.profile }, false);

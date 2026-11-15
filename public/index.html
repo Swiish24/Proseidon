@@ -183,6 +183,7 @@ details.why ul{margin:6px 0 0;padding-left:20px}
 .streak,.streakrow{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;padding:6px 10px;border-radius:10px;background:var(--brass-soft);margin:6px 0}
 .conf{margin-top:12px}
 @media (max-width:520px){.mrow{grid-template-columns:1fr}.mrow .foot{grid-column:1}}
+.goalq .on,.link.on{font-weight:700;text-decoration:underline}.btn.on{border-color:var(--brass);background:var(--brass-soft)}
 .tidecard{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:2px solid var(--brass);background:var(--brass-soft);border-radius:12px;padding:14px 16px}
 .tidecard>div{display:flex;flex-direction:column;gap:2px}
 .tidecard b{font-size:18px}
@@ -227,6 +228,8 @@ textarea.inp{resize:vertical;font-size:16px}
   <div class="wave" aria-hidden="true"><svg viewBox="0 0 1200 24" preserveAspectRatio="none"><path d="M0 12 Q 15 2 30 12 Q 45 22 60 12 Q 75 2 90 12 Q 105 22 120 12 Q 135 2 150 12 Q 165 22 180 12 Q 195 2 210 12 Q 225 22 240 12 Q 255 2 270 12 Q 285 22 300 12 Q 315 2 330 12 Q 345 22 360 12 Q 375 2 390 12 Q 405 22 420 12 Q 435 2 450 12 Q 465 22 480 12 Q 495 2 510 12 Q 525 22 540 12 Q 555 2 570 12 Q 585 22 600 12 Q 615 2 630 12 Q 645 22 660 12 Q 675 2 690 12 Q 705 22 720 12 Q 735 2 750 12 Q 765 22 780 12 Q 795 2 810 12 Q 825 22 840 12 Q 855 2 870 12 Q 885 22 900 12 Q 915 2 930 12 Q 945 22 960 12 Q 975 2 990 12 Q 1005 22 1020 12 Q 1035 2 1050 12 Q 1065 22 1080 12 Q 1095 2 1110 12 Q 1125 22 1140 12 Q 1155 2 1170 12 Q 1185 22 1200 12" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
   <nav class="tiles" id="tiles" aria-label="Sections">
     <button class="tile" data-view="home"><b>The Harbor</b><small>Home</small></button>
+    <button class="tile" data-view="d5"><b>Daily Five</b><small>Same 5 for everyone</small></button>
+    <button class="tile" data-view="tide"><b>Today's Tide</b><small>5 picked for you</small></button>
     <button class="tile" data-view="review"><b id="tReview">Returning Tide</b><small>Review</small></button>
     <button class="tile" data-view="weak"><b>Rough Waters</b><small>Weak spots</small></button>
     <button class="tile" data-view="arena"><b>The Agora</b><small>Argument practice</small></button>

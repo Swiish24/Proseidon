@@ -1,6 +1,6 @@
 {
   "name": "proseidon",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "private": true,
   "type": "module",
   "description": "Proseidon: climb ten levels of English, from parts of speech to PhD.",

@@ -175,3 +175,15 @@ console.log("All server tests passed.");
   assert.ok(streakMult(26) === 2 && streakMult(100) === 2, "multiplier caps at 2x");
   console.log("V7 server tests passed.");
 }
+
+// V8: guests can submit the Daily Five once
+{
+  const c6 = async (path, body) => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now); return { status: res.status, ...(await res.json()) }; };
+  const date = new Date(now()).toISOString().slice(0, 10);
+  let r = await c6("daily/submit", { guest: "g0123456789abcdef", date, res: [true, true, true, true, true] });
+  assert.equal(r.status, 200); const n = r.day.n;
+  r = await c6("daily/submit", { guest: "g0123456789abcdef", date, res: [true, true, true, true, true] });
+  assert.ok(r.repeat && r.day.n === n, "one per guest");
+  assert.equal((await c6("daily/submit", { guest: "bad-id", date, res: [true, true, true, true, true] })).status >= 400, true, "bad guest id blocked");
+  console.log("V8 server tests passed.");
+}

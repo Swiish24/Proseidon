@@ -164,11 +164,13 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       return json({ ids, day, all });
     }
     if (path === "daily/submit" && req.method === "POST") {
-      const [u, err] = await auth(); if (err) return err;
+      // Guests can submit too, with a random id kept on their device.
+      const guest = typeof b.guest === "string" && /^g[0-9a-f]{16}$/.test(b.guest) && !b.user ? b.guest : null;
+      if (!guest) { const [, err] = await auth(); if (err) return err; }
       if (!okDate(b.date)) return json({ error: "Bad date." }, 400);
       const res = Array.isArray(b.res) ? b.res : [];
       if (res.length !== 5 || !res.every(x => typeof x === "boolean")) return json({ error: "Bad results." }, 400);
-      const mark = `${b.date}/u/${key}`;
+      const mark = guest ? `${b.date}/g/${guest}` : `${b.date}/u/${key}`;
       const day = (await daily.get(b.date, { type: "json" })) || emptyDay();
       if (await daily.get(mark, { type: "json" })) return json({ ok: true, repeat: true, day });
       day.n += 1; res.forEach((ok, k) => { if (ok) day.right[k] += 1; }); day.dist[res.filter(Boolean).length] += 1;
