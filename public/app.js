@@ -1,4 +1,4 @@
-import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor } from "./bank.js";
+import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues } from "./bank.js";
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
@@ -20,7 +20,7 @@ try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); if (d && d.user
 let U = null, AUTH = null, ONLINE = false, ADMIN = false, PTS = { week: 0, all: 0 };
 const S = { mode: "loading", lvl: 0, round: [], qi: 0, res: [], prac: [], pi: 0, sel: null, typed: "", answered: false, pq: [], pres: [], hint: false, order: [0, 1, 2, 3], set: null, rp: null, served: {}, qStart: {}, roundPts: 0, arena: null, lb: "week" };
 
-function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, updatedAt: 0 }; }
+function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, updatedAt: 0 }; }
 function fill(p) { const b = blank(p.name); for (const k in b) if (p[k] == null) p[k] = b[k]; return p; }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
 let syncTimer = null;
@@ -152,7 +152,7 @@ function intro() {
   $("card").innerHTML = `<span class="pill">How it works</span><p class="prompt">${esc(U.name)}, here's the plan.</p><div class="steps">${steps.map(s => `<div class="step"><span class="num">${s[0]}</span><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div><div class="row"><button class="btn" id="go">Start the assessment</button><button class="btn ghost" id="skip">Skip and start at Level 1</button></div>`;
   $("go").onclick = startPlace; $("skip").onclick = () => { U.placed = true; start(0); }; $("go").focus();
 }
-function startPlace() { if (!U) return; S.pq = PLACE_LV.map(l => draw(l, 1)[0]); S.pres = []; S.qi = 0; S.mode = "place"; fresh(); save(); render(); }
+function startPlace() { if (!U) return; S.pq = PLACE_LV.map(l => { const ids = LV[l].q.filter(q => q.type === "mc").map(q => q.id); return ids[Math.floor(Math.random() * ids.length)]; }); S.pres = []; S.qi = 0; S.mode = "place"; fresh(); save(); render(); }
 function placed() {
   const sc = S.pres.filter(Boolean).length, miss = S.pres.indexOf(false), lv = miss === -1 ? 9 : Math.max(0, PLACE_LV[miss] - 1);
   S.lvl = lv; U.placed = true; save(); stats();
@@ -165,8 +165,9 @@ function placed() {
 function home() { S.mode = "home"; render(); }
 function homeView() {
   const d = U.daily, done = d.last === today(), due = dueIds().length, weak = weakSpots()[0];
-  const rk = rankFor(PTS.all);
-  $("card").innerHTML = `<span class="pill">The Harbor · Home</span><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
+  const rk = rankFor(PTS.all), tideDone = U.tide === today();
+  $("card").innerHTML = `<span class="pill">The Harbor · Home</span>
+  <div class="tidecard ${tideDone ? "done" : ""}"><div><span class="lbl">Today's Tide</span><b>${tideDone ? "Done for today" : "5 questions · about 3 minutes"}</b><span class="foot">${tideDone ? "Nice work. A new Tide rolls in tomorrow. Extra practice is always open." : "A mix of your review questions and your current level. Counts toward your daily goal."}</span></div><button class="btn ${tideDone ? "ghost" : "brass"}" id="tide">${tideDone ? "Play it again" : "Start today's Tide"}</button></div><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
   ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"}</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
   <div class="grid2">
     <div class="mini ${done ? "good" : ""}"><span class="lbl">Today's goal</span><b>${done ? "Done" : "Finish 1 round"}</b><span class="foot">Day streak ${d.streak} · ${d.freezes} freeze${d.freezes === 1 ? "" : "s"} left this week</span></div>
@@ -177,6 +178,7 @@ function homeView() {
   <div class="badges" aria-label="Level badges">${PLACES.map((pl, k) => `<span class="bdg ${U.best[k] >= 4 ? "got" : ""}" title="${pl}${U.best[k] >= 4 ? " · cleared" : " · not cleared yet"}">${trident}<i>${k + 1}</i></span>`).join("")}</div>
   <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="ar">Enter the Agora</button></div>`;
   $("go").onclick = () => start(S.lvl);
+  $("tide").onclick = startTide;
   if ($("rv")) $("rv").onclick = startReview;
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
   $("ar").onclick = () => { S.mode = "arena"; render(); };
@@ -261,6 +263,9 @@ function questionBody(q) {
     h += `<div class="opts" role="group">` + S.order.map((o, pos) => { let c = "opt"; if (S.answered) { if (o === q.a) c += " right"; else if (o === S.sel) c += " wrong"; } else if (o === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${o}"><span class="k">${pos + 1}</span><span>${esc(q.o[o])}</span></button>`; }).join("") + `</div>`;
   } else if (q.type === "tap") {
     h += `<p class="foot">Tap a word in the sentence.</p><div class="toks">` + q.s.map((w, k) => { let c = "tok"; if (S.answered) { if (k === q.a) c += " right"; else if (k === S.sel) c += " wrong"; } else if (k === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${k}">${esc(w)}</button>`; }).join("") + `</div>`;
+  } else if (q.type === "fix") {
+    const st = S.answered ? (check(q, S.sel) ? "right" : "wrong") : "";
+    h += `<div class="orig"><span class="lbl">Original</span><p>${esc(q.s)}</p></div><div class="field" style="max-width:none"><label class="lbl" for="ans">Your rewrite</label><textarea id="ans" class="inp ${st}" rows="3" autocapitalize="sentences" spellcheck="true" placeholder="Rewrite the sentence here" ${S.answered ? "disabled" : ""}>${esc(S.answered ? S.sel : S.typed)}</textarea><span class="foot">${q.max ? `Aim for ${q.max} words or fewer. ` : ""}Press Ctrl+Enter or Cmd+Enter to check.</span></div>`;
   } else {
     const st = S.answered ? (check(q, S.sel) ? "right" : "wrong") : "";
     h += `<div class="field" style="max-width:420px"><label class="lbl" for="ans">Your answer</label><input id="ans" class="inp ${st}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type your answer" value="${esc(S.answered ? S.sel : S.typed)}" ${S.answered ? "disabled" : ""}></div>`;
@@ -302,7 +307,21 @@ function render() {
   if (S.hint && main && !S.answered) h += `<div class="fb tip"><h3>Coach's tip</h3><p>${esc(L.l)}</p></div>`;
   if (S.answered) {
     const ok = check(q, S.sel);
-    h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}</h3><p>${ok ? "" : `The answer: ${esc(answerText(q))}. `}${esc(q.e)}</p></div>`;
+    let body = "";
+    if (q.type === "fix") {
+      const issues = ok ? [] : fixIssues(q, S.sel);
+      body = `${issues.length ? `<ul class="issues">${issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}<p><b>One strong rewrite:</b> ${esc(q.model)}</p><p>${esc(q.e)}</p>`;
+    } else {
+      body = `<p>${ok ? "" : `The answer: ${esc(answerText(q))}. `}${esc(q.e)}</p>`;
+      if (q.type === "mc" && q.w) {
+        const why = k => q.w[k] ? `<li><b>“${esc(q.o[k])}”:</b> ${esc(q.w[k])}</li>` : "";
+        if (!ok && q.w[S.sel]) body += `<p class="whynot"><b>Why not “${esc(q.o[S.sel])}”:</b> ${esc(q.w[S.sel])}</p>`;
+        const others = [0, 1, 2, 3].filter(k => k !== q.a && (ok || k !== S.sel) && q.w[k]);
+        if (others.length) body += `<details class="why"><summary>Why the ${ok ? "other answers are" : "remaining answers are"} wrong</summary><ul>${others.map(why).join("")}</ul></details>`;
+      }
+    }
+    h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}</h3>${body}</div>`;
+    h += `<div class="report"><button class="link small" id="rep">Something wrong with this question? Report it</button><div id="repBox"></div></div>`;
     if (main && !ok) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson and two practice questions, then back to the climb. This question also goes into your review queue.</p></div>`;
   }
   h += `<div class="row">`;
@@ -319,20 +338,22 @@ function render() {
   $("go").onclick = act;
   if ($("hint")) $("hint").onclick = () => { S.hint = !S.hint; render(); };
   if ($("skipd")) $("skipd").onclick = back;
-  if ($("ans") && !S.answered) { $("ans").oninput = e => { S.typed = e.target.value; $("err").textContent = ""; }; $("ans").onkeydown = e => { if (e.key === "Enter") act(); }; $("ans").focus(); }
+  if ($("ans") && !S.answered) { $("ans").oninput = e => { S.typed = e.target.value; $("err").textContent = ""; }; $("ans").onkeydown = e => { if (e.key === "Enter" && (q.type !== "fix" || e.ctrlKey || e.metaKey)) { e.preventDefault(); act(); } }; $("ans").focus(); }
+  if ($("rep")) $("rep").onclick = () => openReport(q);
   else $("go").focus();
 }
 function pick(o) { if (S.answered) return; S.sel = o; render(); }
 function act() {
   const q = curQ(), main = S.mode === "q", pl = S.mode === "place", set = S.mode === "set";
   if (!S.answered) {
-    if (q.type === "type") { if (!S.typed.trim()) { $("err").textContent = "Type an answer first."; return; } S.sel = S.typed.trim(); }
+    if (q.type === "type" || q.type === "fix") { if (!S.typed.trim()) { $("err").textContent = q.type === "fix" ? "Write your rewrite first." : "Type an answer first."; return; } S.sel = S.typed.trim(); }
     else if (S.sel === null) { $("err").textContent = q.type === "tap" ? "Tap a word first." : "Pick an answer first."; return; }
     S.answered = true; S.hint = false;
     const ok = check(q, S.sel);
     U.total++; if (ok) U.right++; skillHit(q, ok);
+    if (!main) queueStat(q.id, ok);
     if (pl) { S.pres[S.qi] = ok; if (ok) gain(5); else shake(); }
-    else if (set) { S.set.res[S.set.i] = ok; if (S.set.kind === "review") reviewResult(q.id, ok); if (ok) gain(5); else shake(); }
+    else if (set) { S.set.res[S.set.i] = ok; if (S.set.kind === "review" || (S.set.kind === "tide" && U.review[q.id])) reviewResult(q.id, ok); if (ok) gain(5); else { shake(); if (S.set.kind === "tide" && !U.review[q.id]) addReview(q.id); } }
     else if (main) {
       S.res[S.qi] = ok;
       if (ok) { U.streak++; gain(10 + (U.streak >= 3 ? 5 : 0)); } else { U.streak = 0; addReview(q.id); shake(); }
@@ -346,7 +367,7 @@ function act() {
     save(); render(); return;
   }
   if (pl) { if (S.qi < 4) { S.qi++; fresh(); } else S.mode = "placed"; render(); return; }
-  if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else { S.mode = "setdone"; markDay(); save(); } render(); return; }
+  if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
   if (main) { if (check(q, S.sel)) advance(); else { S.prac = draw(S.lvl, 2, S.round); save(); S.mode = "lesson"; render(); } return; }
   if (S.pi < 1) { S.pi++; fresh(); render(); } else back();
 }
@@ -371,8 +392,34 @@ function done() {
 }
 function setDone() {
   const st = S.set, sc = st.res.filter(Boolean).length;
-  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "review" ? (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
+  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? "Today's Tide is done. +15 XP bonus. Come back tomorrow for a fresh set, or keep playing now." : st.kind === "review" ? (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
   $("hm").onclick = home; $("ws").onclick = () => { S.mode = "weak"; render(); }; $("hm").focus();
+}
+
+
+/* ---------- V5: Daily Tide, reports, stats, admin ---------- */
+function startTide() {
+  const due = dueIds().slice(0, 3);
+  const fill = draw(S.lvl, 5 - due.length, due);
+  S.set = { kind: "tide", title: "Today's Tide", ids: shuffle(due.concat(fill)), i: 0, res: [] };
+  S.mode = "set"; fresh(); save(); render();
+}
+let statQueue = [], statTimer = null;
+function queueStat(qid, ok) {
+  if (!ONLINE) return;
+  statQueue.push({ qid, ok }); clearTimeout(statTimer);
+  statTimer = setTimeout(() => { const items = statQueue.splice(0, 10); if (items.length) api("/stat", { items }).catch(() => {}); }, 1200);
+}
+function openReport(q) {
+  const box = $("repBox"); if (!box) return;
+  box.innerHTML = `<div class="field" style="max-width:none;margin-top:8px"><label class="lbl" for="repText">What looks wrong? (optional)</label><textarea id="repText" class="inp" rows="2" maxlength="600" placeholder="I think the second answer is also correct."></textarea></div><div class="row" style="margin-top:8px"><button class="btn small" id="repSend">Send report</button><button class="btn ghost small" id="repCancel">Cancel</button></div><p class="err" id="repErr"></p>`;
+  $("repCancel").onclick = () => { box.innerHTML = ""; };
+  $("repSend").onclick = async () => {
+    if (!ONLINE) { $("repErr").textContent = "Reports need the online version of Proseidon."; return; }
+    try { await api("/report", { qid: q.id, note: $("repText").value.trim(), user: U ? U.name : "", answer: S.sel }); box.innerHTML = `<p class="foot">Thanks. Your report was sent with this question attached.</p>`; }
+    catch (e) { $("repErr").textContent = "Your report couldn't be sent. Try again."; }
+  };
+  $("repText").focus();
 }
 
 /* ---------- feedback ---------- */
@@ -392,15 +439,33 @@ async function sendFb() {
   catch (e) { $("fbsend").textContent = "Send feedback"; $("fberr").textContent = ONLINE ? "Your feedback couldn't be sent. Check your connection and try again." : "Feedback needs the online version of Proseidon."; }
 }
 async function inboxView() {
-  $("card").innerHTML = `<span class="pill">Feedback inbox</span><p class="foot">Loading…</p>`;
+  const tab = S.inboxTab || "feedback";
+  const head = `<span class="pill">Admin · only you can see this</span><div class="tabs" role="tablist">${[["feedback", "Feedback"], ["reports", "Question reports"], ["health", "Question health"]].map(([k, l]) => `<button role="tab" class="tab ${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-itab="${k}">${l}</button>`).join("")}</div>`;
+  const wire = () => { document.querySelectorAll("[data-itab]").forEach(b => b.onclick = () => { S.inboxTab = b.dataset.itab; render(); }); if ($("hm")) $("hm").onclick = home; };
+  const back = `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
+  $("card").innerHTML = head + `<p class="foot">Loading…</p>`; wire();
   try {
-    const r = await api("/feedback/list", { ...AUTH });
-    const avg = r.items.filter(x => x.rating).reduce((a, x, _, arr) => a + x.rating / arr.length, 0);
-    $("card").innerHTML = `<span class="pill">Feedback inbox · only you can see this</span><p class="prompt">${r.items.length} response${r.items.length === 1 ? "" : "s"}${avg ? ` · average ${avg.toFixed(1)} stars` : ""}</p>` +
-      (r.items.length ? `<div class="skills">${r.items.map(x => `<div class="skill"><div class="sk-top"><span><b>${x.rating ? "★".repeat(x.rating) + "☆".repeat(5 - x.rating) : "No rating"}</b> <span class="foot">${esc(x.username || "anonymous")}${x.level ? ` · Level ${x.level}` : ""}</span></span><span class="foot">${new Date(x.at).toLocaleString()}</span></div>${x.comments ? `<p style="margin:0">${esc(x.comments)}</p>` : ""}</div>`).join("")}</div>` : `<p class="lead">No feedback yet.</p>`) +
-      `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
-  } catch (e) { $("card").innerHTML = `<span class="pill">Feedback inbox</span><p class="err">${esc(e.message)}</p><div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`; }
-  $("hm").onclick = home;
+    if (tab === "health") {
+      const r = await api("/admin/health", { ...AUTH });
+      if (S.mode !== "inbox" || (S.inboxTab || "feedback") !== "health") return;
+      const rows = r.rows.map(x => { const q = BYID[x.qid]; const pct = Math.round(100 * x.miss / x.n); return `<tr><td class="num">${pct}%</td><td class="num">${x.n}</td><td>L${q.lvl + 1}</td><td>${esc(q.p.length > 90 ? q.p.slice(0, 88) + "…" : q.p)}<br><span class="foot">Answer: ${esc(answerText(q))}</span></td></tr>`; }).join("");
+      $("card").innerHTML = head + `<p class="lead">${r.total.toLocaleString()} answers across ${r.questions} questions. Questions most players miss are listed first. A very high miss rate can mean unclear wording or a wrong answer key.</p>` + (r.rows.length ? `<div class="tblwrap"><table class="lb"><thead><tr><th class="num">Missed</th><th class="num">Tries</th><th>Level</th><th>Question</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="lead">No answers recorded yet.</p>`) + back;
+    } else {
+      const r = await api("/feedback/list", { ...AUTH });
+      if (S.mode !== "inbox" || (S.inboxTab || "feedback") !== tab) return;
+      if (tab === "reports") {
+        const items = r.items.filter(x => x.kind === "report");
+        $("card").innerHTML = head + `<p class="prompt">${items.length} report${items.length === 1 ? "" : "s"}</p>` + (items.length ? `<div class="skills">${items.map(x => { const q = BYID[x.qid]; let theirs = ""; if (q && x.answer !== "" && x.answer != null) theirs = q.type === "mc" ? q.o[+x.answer] : q.type === "tap" ? q.s[+x.answer] : x.answer; return `<div class="skill"><div class="sk-top"><span><b>Level ${q ? q.lvl + 1 : "?"}</b> <span class="foot">${esc(x.username || "anonymous")} · ${new Date(x.at).toLocaleString()}</span></span><span class="foot">${esc(x.qid)}</span></div><p style="margin:0">${esc(q ? q.p : "(question removed)")}</p><p class="foot" style="margin:0">Answer key: ${q ? esc(answerText(q)) : "?"}${theirs ? ` · They answered: ${esc(theirs)}` : ""}</p>${x.note ? `<p style="margin:0"><b>Note:</b> ${esc(x.note)}</p>` : ""}</div>`; }).join("")}</div>` : `<p class="lead">No question reports yet.</p>`) + back;
+      } else {
+        const items = r.items.filter(x => x.kind !== "report");
+        const rated = items.filter(x => x.rating);
+        const avg = rated.length ? rated.reduce((a, x) => a + x.rating, 0) / rated.length : 0;
+        $("card").innerHTML = head + `<p class="prompt">${items.length} response${items.length === 1 ? "" : "s"}${avg ? ` · average ${avg.toFixed(1)} stars` : ""}</p>` +
+          (items.length ? `<div class="skills">${items.map(x => `<div class="skill"><div class="sk-top"><span><b>${x.rating ? "★".repeat(x.rating) + "☆".repeat(5 - x.rating) : "No rating"}</b> <span class="foot">${esc(x.username || "anonymous")}${x.level ? ` · Level ${x.level}` : ""}</span></span><span class="foot">${new Date(x.at).toLocaleString()}</span></div>${x.comments ? `<p style="margin:0">${esc(x.comments)}</p>` : ""}</div>`).join("")}</div>` : `<p class="lead">No feedback yet.</p>`) + back;
+      }
+    }
+  } catch (e) { $("card").innerHTML = head + `<p class="err">${esc(e.message)}</p>` + back; }
+  wire();
 }
 
 /* ---------- wiring ---------- */

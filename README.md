@@ -1,6 +1,6 @@
 # Proseidon
 
-Climb ten levels of English, from parts of speech to PhD. Live at https://proseidon-game.netlify.app
+Climb ten levels of English, from parts of speech to PhD. Live at https://proseidon.proseidonplay.workers.dev
 
 ## What's here
 
@@ -17,7 +17,7 @@ The same code runs on Cloudflare Workers or Netlify. Each host builds from this 
 - Cloudflare: build command `npm install`, deploy command `npx wrangler deploy`.
 - Netlify: settings come from `netlify.toml`.
 
-Feedback is saved by the game's own server. To read it in the game, add your username to `ADMIN_USERS` (in `wrangler.jsonc` for Cloudflare, or as an environment variable on Netlify), then use the Feedback inbox button.
+Feedback is saved by the game's own server. To read it in the game, add your username to `ADMIN_USERS` (in `wrangler.jsonc` for Cloudflare, or as an environment variable on Netlify), then use the Admin inbox button. It has three tabs: feedback, question reports, and question health (miss rates).
 
 ## Scoring
 
@@ -25,4 +25,4 @@ Only level rounds count toward the leaderboard. Each correct answer earns 10 × 
 
 ## Editing questions
 
-All questions live in `public/bank.js`. Each multiple-choice question is `[prompt, [4 options], index of the right option, explanation]`. Every question needs a skill tag; the tag strings sit in `SK` below the questions.
+Questions live in `public/bank.js` (the original set) and `public/bank-v5.js` (V5 additions: wrong-answer notes, new questions, and rewrite drills). Each level has 45 questions. Each multiple-choice question is `[prompt, [4 options], index of the right option, explanation]`. Every question needs a skill tag; the tag strings sit in `SK` below the questions.

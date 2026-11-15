@@ -24,7 +24,7 @@ export function isoWeek(d) {
 }
 
 export async function handle(req, store, now = () => Date.now(), opts = {}) {
-  const users = store("users"), rounds = store("rounds"), scores = store("scores"), feedback = store("feedback");
+  const users = store("users"), rounds = store("rounds"), scores = store("scores"), feedback = store("feedback"), stats = store("stats");
   const admins = String(opts.admins || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/(\.netlify\/functions\/)?api\/?/, "").replace(/\/$/, "");
@@ -51,6 +51,17 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       return [null, json({ error: "Wrong PIN." }, 401)];
     }
     return [null, json({ error: "Please sign in again." }, 401)];
+  }
+  async function tally(qid, ok) {
+    if (!BYID[qid]) return;
+    const rec = (await stats.get(qid, { type: "json" })) || { n: 0, miss: 0 };
+    rec.n += 1; if (!ok) rec.miss += 1;
+    await stats.setJSON(qid, rec);
+  }
+  async function needAdmin() {
+    const [u, err] = await auth(); if (err) return err;
+    if (!admins.includes(key)) return json({ error: "Only admins can see this." }, 403);
+    return null;
   }
   const newToken = u => { const t = crypto.randomBytes(24).toString("hex"); u.tokens = [t, ...(u.tokens || [])].slice(0, 5); return t; };
   async function totals() {
@@ -126,6 +137,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const elapsedMs = now() - r.served[i];
       let pts = 0;
       if (correct) { r.streak += 1; r.right += 1; pts = points(r.lvl, elapsedMs, r.streak); } else r.streak = 0;
+      await tally(q.id, correct);
       r.i += 1;
       const finished = r.i === 5;
       const bonus = finished && r.right >= 4 ? 20 * (r.lvl + 1) : 0;
@@ -144,13 +156,37 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       return json({ ok: true });
     }
 
+    if (path === "report" && req.method === "POST") {
+      const q = BYID[String(b.qid || "")];
+      if (!q) return json({ error: "Unknown question." }, 400);
+      const note = String(b.note || "").trim().slice(0, 600);
+      const id = `${now()}-${crypto.randomBytes(4).toString("hex")}`;
+      await feedback.setJSON(id, { kind: "report", at: now(), qid: q.id, note, answer: String(b.answer ?? "").slice(0, 300), username: okName(b.user) ? b.user : "" });
+      return json({ ok: true });
+    }
+
+    if (path === "stat" && req.method === "POST") {
+      // Practice, review, drill, and assessment answers. Scored rounds are tallied on the server already.
+      const list = Array.isArray(b.items) ? b.items.slice(0, 10) : [];
+      for (const it of list) await tally(String(it.qid || ""), !!it.ok);
+      return json({ ok: true });
+    }
+
     if (path === "feedback/list" && req.method === "POST") {
-      const [u, err] = await auth(); if (err) return err;
-      if (!admins.includes(key)) return json({ error: "Only admins can read feedback." }, 403);
+      const bad = await needAdmin(); if (bad) return bad;
       const { blobs } = await feedback.list({ prefix: "" });
-      const keys = blobs.map(x => x.key).sort().reverse().slice(0, 200);
+      const keys = blobs.map(x => x.key).sort().reverse().slice(0, 300);
       const items = (await Promise.all(keys.map(k => feedback.get(k, { type: "json" })))).filter(Boolean);
       return json({ items });
+    }
+
+    if (path === "admin/health" && req.method === "POST") {
+      const bad = await needAdmin(); if (bad) return bad;
+      const { blobs } = await stats.list({ prefix: "" });
+      const rows = (await Promise.all(blobs.map(async x => ({ qid: x.key, ...(await stats.get(x.key, { type: "json" })) }))))
+        .filter(r => r.n > 0 && BYID[r.qid]);
+      rows.sort((a, c) => c.miss / c.n - a.miss / a.n || c.n - a.n);
+      return json({ total: rows.reduce((t, r) => t + r.n, 0), questions: rows.length, rows: rows.slice(0, 60) });
     }
 
     if (path === "leaderboard" && req.method === "GET") {

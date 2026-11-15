@@ -7,6 +7,6 @@
   "assets": { "directory": "./public", "binding": "ASSETS" },
   "durable_objects": { "bindings": [{ "name": "STORE", "class_name": "Store" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Store"] }],
-  "vars": { "ADMIN_USERS": "" },
+  "vars": { "ADMIN_USERS": "swiish24" },
   "observability": { "enabled": true }
 }

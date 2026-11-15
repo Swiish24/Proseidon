@@ -112,3 +112,19 @@ console.log("All server tests passed.");
   assert.equal(list.items.length, 1); assert.equal(list.items[0].comments, "Love the Agora");
   console.log("Feedback tests passed.");
 }
+
+// V5: reports, question stats, admin health
+{
+  const call3 = async (path, body, admins = "dan_w") => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now, { admins }); return { status: res.status, ...(await res.json()) }; };
+  assert.equal((await call3("report", { qid: "0-1", note: "Option B is also right?", user: "emoryy.1", answer: 2 })).status, 200);
+  assert.equal((await call3("report", { qid: "nope" })).status, 400, "unknown question blocked");
+  await call3("stat", { items: [{ qid: "0-1", ok: false }, { qid: "0-1", ok: false }, { qid: "0-2", ok: true }] });
+  const t = (await call3("login", { user: "Dan_W", pin: "1234" })).token;
+  const h = await call3("admin/health", { user: "Dan_W", token: t });
+  assert.equal(h.status, 200); assert.equal(h.rows[0].qid, "0-1"); assert.equal(h.rows[0].miss, 2);
+  assert.ok(h.rows.some(r => r.qid === ids[0]), "scored-round answers are tallied too");
+  assert.equal((await call3("admin/health", { user: "Dan_W", token: t }, "")).status, 403, "non-admin blocked");
+  const inbox = await call3("feedback/list", { user: "Dan_W", token: t });
+  assert.ok(inbox.items.some(x => x.kind === "report" && x.qid === "0-1"), "report in inbox");
+  console.log("V5 server tests passed.");
+}
