@@ -2,6 +2,8 @@
 import { WN, ADD, FIX } from "./bank-v5.js";
 import { EDIT, MORE } from "./bank-v6.js";
 import { LAB, MATCH } from "./bank-v7.js";
+import { MYTHS, ADD8, EDIT8, TIPS } from "./bank-v8.js";
+export { TIPS };
 const RAW=[
 {t:"Parts of speech",l:"Every word has a job. Nouns name things. Verbs show action or being. Adjectives describe nouns. Adverbs describe verbs, adjectives, or other adverbs. Pronouns stand in for nouns. Prepositions show position or relation (under, to, after). Conjunctions join (and, but, so). Interjections show feeling (wow). The same word can do different jobs in different sentences.",q:[
 ["Which word is a pronoun? “She handed the report to Mark.”",["handed","report","She","to"],2,"“She” stands in for a person's name."],
@@ -210,7 +212,7 @@ export const PLACE_LV=[1,3,5,7,9];
 // ADD = extra multiple-choice questions [prompt, options, answer index, explanation, wrong notes, skill tag],
 // FIX = rewrite drills.
 
-const mcq=(i,id,r,w,tag)=>{const x=EDIT[id];if(x){r=x;w=x[4]}return{id,lvl:i,type:"mc",p:r[0],o:r[1],a:r[2],e:r[3],w:w||null,tag}};
+const mcq=(i,id,r,w,tag)=>{const x=EDIT8[id]||EDIT[id];if(x){r=x;w=x[4]}const q={id,lvl:i,type:"mc",p:r[0],o:r[1],a:r[2],e:r[3],w:w||null,tag};if(x&&x[5])q.alt=x[5];if(x&&x[6])q.ruling=x[6];return q};
 export const LV=RAW.map((L,i)=>({t:L.t,l:L.l,skills:SK[i].names,q:[
   ...L.q.map((r,j)=>mcq(i,`${i}-${j}`,r,(WN[i]||[])[j],SK[i].tags[j])),
   ...EXTRA[i].map((x,j)=>({id:`${i}-x${j}`,lvl:i,...x})),
@@ -218,7 +220,9 @@ export const LV=RAW.map((L,i)=>({t:L.t,l:L.l,skills:SK[i].names,q:[
   ...(FIX[i]||[]).map((x,j)=>({id:`${i}-f${j}`,lvl:i,type:"fix",scenic:true,...x})),
   ...(LAB[i]||[]).map((x,j)=>({id:`${i}-l${j}`,lvl:i,scenic:true,...x})),
   ...(MATCH[i]||[]).map((x,j)=>({id:`${i}-t${j}`,lvl:i,...x})),
-  ...(MORE[i]||[]).map((x,j)=>({id:`${i}-m${j}`,lvl:i,...x}))]}));
+  ...(MORE[i]||[]).map((x,j)=>({id:`${i}-m${j}`,lvl:i,...x})),
+  ...(ADD8[i]||[]).map((x,j)=>({id:`${i}-v${j}`,lvl:i,type:"mc",...x})),
+  ...MYTHS.map((x,k)=>[x,k]).filter(([x])=>x.lvl===i).map(([x,k])=>({...x,id:`${i}-y${k}`,lvl:i,type:"mor",myth:true}))]}));
 export const BYID={};LV.forEach(L=>L.q.forEach(q=>{BYID[q.id]=q}));
 const norm=s=>String(s==null?"":s).trim().toLowerCase().replace(/[’‘]/g,"'").replace(/[.!?]+$/,"");
 const flat=s=>" "+String(s==null?"":s).toLowerCase().replace(/[’‘]/g,"'").replace(/[“”"]/g,"").replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim()+" ";
@@ -238,8 +242,8 @@ export function fixIssues(q,r){
 }
 const tnorm=t=>String(t).toLowerCase().replace(/[’‘]/g,"'").replace(/\s+([,.;:?!])/g,"$1").replace(/\s+/g," ").trim();
 export function orderText(q,r){return(Array.isArray(r)?r:[]).map(i=>q.tiles[i]).filter(x=>x!=null).join(q.join??" ").replace(/\s+([,.;:?!])/g,"$1")}
-export function check(q,r){if(q.type==="order")return Array.isArray(r)&&q.acc.some(a=>tnorm(a)===tnorm(orderText(q,r)));if(q.type==="match")return Array.isArray(r)&&r.length===q.pairs.length&&r.every((d,i)=>d===i);if(q.type==="multi")return Array.isArray(r)&&r.length===q.a.length&&q.a.every(x=>r.includes(x));if(q.type==="type")return q.acc.some(a=>norm(a)===norm(r));if(q.type==="fix")return fixIssues(q,r).length===0;return Number(r)===q.a}
-export function answerText(q){if(q.type==="fix")return q.model;if(q.type==="order")return q.acc[0];if(q.type==="match")return q.pairs.map(x=>`${x[0]} = ${x[1]}`).join("; ");if(q.type==="multi")return q.a.map((i,k)=>q.s[i].replace(/[.,]$/,"")+(q.fixes?` (should be “${q.fixes[k]}”)`:"")).join(", ");return q.type==="mc"?q.o[q.a]:q.type==="tap"?(q.fix?`${q.s[q.a].replace(/[.,]$/,"")} should be “${q.fix}”`:q.s[q.a].replace(/[.,]$/,"")):q.acc[0]}
+export function check(q,r){if(q.type==="mor")return Number(r)===q.a;if(q.type==="mc"&&q.alt&&q.alt.includes(Number(r)))return true;if(q.type==="order")return Array.isArray(r)&&q.acc.some(a=>tnorm(a)===tnorm(orderText(q,r)));if(q.type==="match")return Array.isArray(r)&&r.length===q.pairs.length&&r.every((d,i)=>d===i);if(q.type==="multi")return Array.isArray(r)&&r.length===q.a.length&&q.a.every(x=>r.includes(x));if(q.type==="type")return q.acc.some(a=>norm(a)===norm(r));if(q.type==="fix")return fixIssues(q,r).length===0;return Number(r)===q.a}
+export function answerText(q){if(q.type==="mor")return q.a?"Real rule":"Myth";if(q.type==="fix")return q.model;if(q.type==="order")return q.acc[0];if(q.type==="match")return q.pairs.map(x=>`${x[0]} = ${x[1]}`).join("; ");if(q.type==="multi")return q.a.map((i,k)=>q.s[i].replace(/[.,]$/,"")+(q.fixes?` (should be “${q.fixes[k]}”)`:"")).join(", ");return q.type==="mc"?q.o[q.a]:q.type==="tap"?(q.fix?`${q.s[q.a].replace(/[.,]$/,"")} should be “${q.fix}”`:q.s[q.a].replace(/[.,]$/,"")):q.acc[0]}
 // Accuracy streak: +4% per correct answer in a row (carries across rounds), up to 2x.
 export const streakMult=n=>1+0.04*Math.min(Math.max((n||0)-1,0),25);
 // Rewrite drills take time to type, so they get a flat bonus instead of a fading speed bonus.

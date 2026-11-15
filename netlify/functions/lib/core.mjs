@@ -113,7 +113,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const ids = Array.isArray(b.qids) ? b.qids : [];
       // A long accuracy streak (8+) unlocks one "stretch" question from the next level.
       const up = ids.filter(id => BYID[id] && BYID[id].lvl === lvl + 1).length;
-      const okIds = ids.every(id => BYID[id] && !BYID[id].scenic && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
+      const okIds = ids.every(id => BYID[id] && !BYID[id].scenic && !BYID[id].myth && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
       if (ids.length !== 5 || new Set(ids).size !== 5 || !okIds || up > 1 || (up === 1 && (u.astreak || 0) < 8)) return json({ error: "Bad questions." }, 400);
       const id = crypto.randomBytes(12).toString("hex");
       await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });

@@ -1,4 +1,4 @@
-import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues, dailyIds, orderText, streakMult } from "./bank.js";
+import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues, dailyIds, orderText, streakMult, TIPS } from "./bank.js";
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
@@ -38,7 +38,7 @@ async function api(path, body) {
 
 /* ---------- progress helpers ---------- */
 function draw(l, n, avoid = []) {
-  const all = LV[l].q.filter(q => !q.scenic).map(q => q.id).filter(id => !avoid.includes(id));
+  const all = LV[l].q.filter(q => !q.scenic && !q.myth).map(q => q.id).filter(id => !avoid.includes(id));
   U.seen[l] = (U.seen[l] || []).filter(id => BYID[id]);
   let pick = shuffle(all.filter(id => !U.seen[l].includes(id))).slice(0, n);
   if (pick.length < n) {
@@ -211,7 +211,7 @@ function homeView() {
   <div class="badges" aria-label="Level badges">${PLACES.map((pl, k) => `<span class="bdg ${U.best[k] >= 4 ? "got" : ""}" title="${pl}${U.best[k] >= 4 ? " · cleared" : " · not cleared yet"}">${trident}<i>${k + 1}</i></span>`).join("")}</div>
   <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
   ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
-  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="mix">Mix look-alikes</button><button class="btn ghost" id="ar">Enter the Agora</button></div>
+  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="myth">Myth or rule?</button><button class="btn ghost" id="mix">Mix look-alikes</button><button class="btn ghost" id="ar">Enter the Agora</button></div>
   <p class="foot goalq">Practicing for: ${GOALS.map(g => `<button class="link small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join(" · ")}${U.goal ? "" : " (optional)"}</p>
   <p class="foot conf">Confidence check: <b>${U.conf ? "On" : "Off"}</b>. ${U.conf ? "You'll tap “sure” or “not sure” before checking." : "Turn it on to tap “sure” or “not sure” before checking. Confident mistakes get extra review."} <button class="link small" id="conf">${U.conf ? "Turn off" : "Turn on"}</button></p>`;
   $("go").onclick = () => start(S.lvl);
@@ -221,6 +221,7 @@ function homeView() {
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
   $("ar").onclick = () => { S.mode = "arena"; render(); };
   $("mix").onclick = startMix;
+  $("myth").onclick = startMyths;
   wireGoals(render);
   if ($("mkAcct")) $("mkAcct").onclick = () => $("sw").click();
   if ($("doPlace")) $("doPlace").onclick = startPlace;
@@ -236,6 +237,24 @@ function startReview() {
 }
 // Look-alike skills mixed together: telling them apart is the skill.
 const LOOKALIKES = [[2, "A"], [3, "F"], [3, "S"], [3, "P"], [3, "W"], [7, "P"], [7, "V"]];
+function startMyths() {
+  if (!U.mythIntro) { S.mode = "rules"; return render(); }
+  const all = []; LV.forEach(L => L.q.forEach(q => { if (q.myth) all.push(q.id); }));
+  const seen = U.mythSeen || [], fresh1 = shuffle(all.filter(id => !seen.includes(id))), ids = fresh1.concat(shuffle(all.filter(id => !fresh1.includes(id)))).slice(0, 5);
+  U.mythSeen = seen.concat(ids).slice(-15);
+  S.set = { kind: "myth", title: "Myth or rule?", ids, i: 0, res: [] }; S.mode = "set"; fresh(); save(); render();
+}
+function rulesView() {
+  $("card").innerHTML = `<span class="pill scenic">Rules, choices, and style</span><p class="prompt">Not every grammar “rule” is a rule.</p>
+  <div class="steps">
+  <div class="step"><span class="num">1</span><div><h3>Rules</h3><p>Every major guide agrees. Break one and readers notice: “The list are long,” or “it's” where you meant “its.”</p></div></div>
+  <div class="step"><span class="num">2</span><div><h3>Choices</h3><p>More than one version is correct. Pick by reader and tone: active or passive, short or long sentences, contractions or not.</p></div></div>
+  <div class="step"><span class="num">3</span><div><h3>Style</h3><p>A style guide picks one option so a team stays consistent. Chicago (books and academic writing) uses the comma before “and” in a list. AP (news and business) usually doesn't. Follow the one your workplace uses.</p></div></div>
+  <div class="step"><span class="num">4</span><div><h3>Myths</h3><p>“Rules” many of us learned in school that the major guides reject, like never splitting an infinitive.</p></div></div></div>
+  <p class="foot">In Proseidon, when the major guides disagree, every accepted answer counts. Look for <b>The Oracle's ruling</b>.</p>
+  <div class="row"><button class="btn brass" id="go">Play Myth or rule?</button><button class="btn ghost" id="hm">Back to home</button></div>`;
+  $("go").onclick = () => { U.mythIntro = true; save(); startMyths(); }; $("hm").onclick = home; $("go").focus();
+}
 function startMix() {
   const groups = LOOKALIKES.map(([l, t]) => shuffle(LV[l].q.filter(q => q.tag === t && !q.scenic && ["mc", "tap", "match"].includes(q.type)).map(q => q.id)));
   const ids = []; for (let k = 0; ids.length < 6 && k < 20; k++) for (const g of shuffle(groups)) { if (ids.length < 6 && g[k] && !ids.includes(g[k])) ids.push(g[k]); }
@@ -312,9 +331,11 @@ function curQ() {
 function questionBody(q) {
   let h = `<p class="prompt">${esc(q.p)}</p>`;
   if (q.type === "mc") {
-    h += `<div class="opts" role="group">` + S.order.map((o, pos) => { let c = "opt"; if (S.answered) { if (o === q.a) c += " right"; else if (o === S.sel) c += " wrong"; } else if (o === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${o}"><span class="k">${pos + 1}</span><span>${esc(q.o[o])}</span></button>`; }).join("") + `</div>`;
+    h += `<div class="opts" role="group">` + S.order.map((o, pos) => { let c = "opt"; if (S.answered) { if (o === q.a || (q.alt || []).includes(o)) c += " right"; else if (o === S.sel) c += " wrong"; } else if (o === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${o}"><span class="k">${pos + 1}</span><span>${esc(q.o[o])}</span></button>`; }).join("") + `</div>`;
   } else if (q.type === "tap") {
     h += `<p class="foot">Tap a word in the sentence.</p><div class="toks">` + q.s.map((w, k) => { let c = "tok"; if (S.answered) { if (k === q.a) c += " right"; else if (k === S.sel) c += " wrong"; } else if (k === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${k}">${esc(w)}</button>`; }).join("") + `</div>`;
+  } else if (q.type === "mor") {
+    h += `<div class="mor">` + [["Myth", 0], ["Real rule", 1]].map(([lbl, k]) => { let c = "opt morb"; if (S.answered) { if (k === q.a) c += " right"; else if (k === S.sel) c += " wrong"; } else if (k === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${k}"><span class="k">${k + 1}</span><span>${lbl}</span></button>`; }).join("") + `</div>`;
   } else if (q.type === "order") {
     const sel = S.sel || [], text = orderText(q, sel), ok = S.answered && check(q, sel);
     h += `<p class="foot">${S.answered ? "" : "Tap or drag the tiles to build it. Tap a placed tile to remove it. Not every tile has to be used."}</p><div class="build ${S.answered ? (ok ? "right" : "wrong") : ""}" id="build" aria-label="Your answer">${sel.length ? sel.map((ti, k) => `<button class="tile2 placed" ${S.answered ? "disabled" : ""} data-orem="${k}" draggable="${!S.answered}" data-odrag="p${k}">${esc(q.tiles[ti])}</button>`).join("") : `<span class="foot">Your ${q.join === "" ? "word" : "sentence"} appears here.</span>`}</div>`;
@@ -353,10 +374,11 @@ function render() {
   if (S.mode === "inbox") return inboxView();
   if (S.mode === "done") return done();
   if (S.mode === "setdone") return setDone();
+  if (S.mode === "rules") return rulesView();
   if (S.mode === "d5done") return dailyDone();
   const L = LV[S.lvl];
   if (S.mode === "lesson") {
-    c.innerHTML = `<div class="top"><span class="pill scenic">Scenic route · ${esc(L.t)}</span></div><div class="fb lesson"><h3>Quick lesson</h3><p>${esc(L.l)}</p></div><div class="row"><button class="btn brass" id="go">Practice, then a writing task</button><button class="btn ghost" id="skipd">Skip the detour</button></div>`;
+    c.innerHTML = `<div class="top"><span class="pill scenic">Scenic route · ${esc(L.t)}</span></div><div class="fb lesson"><h3>Quick lesson</h3><p>${esc(L.l)}</p></div>${S.missTip ? `<p class="foot styletip"><b>Style tip:</b> ${esc(S.missTip)}</p>` : ""}<div class="row"><button class="btn brass" id="go">Practice, then a writing task</button><button class="btn ghost" id="skipd">Skip the detour</button></div>`;
     $("go").onclick = () => { S.mode = "prac"; S.pi = 0; fresh(); render(); }; $("skipd").onclick = back; $("go").focus(); return;
   }
   const q = curQ(), main = S.mode === "q", pl = S.mode === "place", set = S.mode === "set";
@@ -377,6 +399,8 @@ function render() {
     if (q.type === "fix") {
       const issues = ok ? [] : fixIssues(q, S.sel);
       body = `${issues.length ? `<ul class="issues">${issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}<p><b>One strong rewrite:</b> ${esc(q.model)}</p><p>${esc(q.e)}</p>`;
+    } else if (q.type === "mor") {
+      body = `<p><b>${q.a ? "Real rule." : "Myth."}</b> ${q.kind === "Choice" ? "It's really a choice that depends on your reader. " : q.kind === "Style" ? "It's really a house-style choice. " : ""}${esc(q.e)}</p>`;
     } else {
       body = `<p>${ok ? "" : `The answer: ${esc(answerText(q))}. `}${esc(q.e)}</p>`;
       if (q.type === "mc" && q.w) {
@@ -388,6 +412,8 @@ function render() {
     }
     h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}${!ok && main && S.lostStreak >= 3 ? ` Streak of ${S.lostStreak} ended.` : ""}</h3>${body}</div>`;
     if (set && S.set.kind === "daily") h += `<p class="foot dpct">${esc(dailyPct(q.id, S.set.i))}</p>`;
+    if (q.ruling) h += `<div class="fb oracle"><h3>The Oracle's ruling</h3><p>${esc(q.ruling)}</p></div>`;
+    if (!ok && TIPS[q.lvl + "|" + q.tag]) h += `<p class="foot styletip"><b>Style tip:</b> ${esc(TIPS[q.lvl + "|" + q.tag])}</p>`;
     if (S.sure === true && !ok) h += `<div class="fb tip"><h3>Confident miss</h3><p>You were sure, and it was wrong. These are the mistakes that stick best once corrected, so it goes into your review queue.</p></div>`;
     if (S.sure === false && ok) h += `<p class="foot">Right, but you weren't sure. It will come back once in review to lock it in.</p>`;
     if (stretchQ && !ok) h += `<p class="foot">Stretch questions don't break your streak.</p>`;
@@ -463,7 +489,7 @@ function act() {
   }
   if (pl) { if (S.qi < 4) { S.qi++; fresh(); } else S.mode = "placed"; render(); return; }
   if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else if (S.set.kind === "daily") { finishDaily(); return; } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
-  if (main) { if (check(q, S.sel)) advance(); else { S.prac = [draw(S.lvl, 1, S.round)[0], scenicPick(q.lvl, q.tag)]; save(); S.mode = "lesson"; render(); } return; }
+  if (main) { if (check(q, S.sel)) advance(); else { S.prac = [draw(S.lvl, 1, S.round)[0], scenicPick(q.lvl, q.tag)]; S.missTip = TIPS[q.lvl + "|" + q.tag] || ""; save(); S.mode = "lesson"; render(); } return; }
   if (S.pi < 1) { S.pi++; fresh(); render(); } else back();
 }
 function scenicPick(l, tag) {
@@ -494,7 +520,8 @@ function done() {
 }
 function setDone() {
   const st = S.set, sc = st.res.filter(Boolean).length;
-  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? (d5Today() ? "That's today. Your Tide and the Daily Five are both done. +15 XP bonus. See you tomorrow." : "Today's Tide is done. +15 XP bonus. The Daily Five is still waiting.") : st.kind === "mix" ? "Mixing look-alikes is harder than drilling one at a time. That extra effort is what helps you tell them apart later." : st.kind === "review" ? "Reviews feel harder than new questions. That's the point: pulling an answer back after a gap is what makes it last. " + (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
+  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? (d5Today() ? "That's today. Your Tide and the Daily Five are both done. +15 XP bonus. See you tomorrow." : "Today's Tide is done. +15 XP bonus. The Daily Five is still waiting.") : st.kind === "myth" ? "Rules hold in every major guide. Choices depend on your reader. Style is your workplace's pick. Myths are school rules the guides reject. <button class=\"link small\" id=\"rcs\">What's the difference?</button>" : st.kind === "mix" ? "Mixing look-alikes is harder than drilling one at a time. That extra effort is what helps you tell them apart later." : st.kind === "review" ? "Reviews feel harder than new questions. That's the point: pulling an answer back after a gap is what makes it last. " + (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
+  if ($("rcs")) $("rcs").onclick = () => { S.mode = "rules"; render(); };
   $("hm").onclick = home; $("ws").onclick = () => { S.mode = "weak"; render(); }; $("hm").focus();
 }
 
@@ -622,7 +649,7 @@ document.addEventListener("click", e => {
 document.addEventListener("keydown", e => {
   if (!["q", "prac", "place", "set"].includes(S.mode) || S.answered) return;
   if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
-  const q = curQ(); if (q.type !== "mc") return;
+  const q = curQ(); if (q.type === "mor") { if (["1", "2"].includes(e.key)) pick(+e.key - 1); return; } if (q.type !== "mc") return;
   if (["1", "2", "3", "4"].includes(e.key)) pick(S.order[+e.key - 1]);
 });
 document.querySelectorAll("#tiles .tile").forEach(t => t.onclick = () => {
