@@ -126,11 +126,12 @@ function enter(key, res, isNew) {
 function welcome(prefill) {
   const others = Object.keys(DB.users).filter(k => k !== GUEST);
   $("card").innerHTML = `<p class="big">Welcome aboard.</p><p class="lead">Proseidon is a game for sharper English. Climb ten levels, from parts of speech to PhD-level rhetoric, and compete on the leaderboard.</p>
+  <div class="fb tip guestbox"><h3>Play now, no account needed</h3><p>Progress saves on this device. Make an account anytime to keep it everywhere and join the leaderboard.</p><div class="row"><button class="btn brass" id="gD5">Play today's Daily Five</button><button class="btn ghost" id="gTide">Today's Tide</button><button class="btn ghost" id="gGo">Continue as a guest</button></div></div>
+  <p class="lbl" style="margin-top:14px">Have an account, or want one?</p>
   <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wordsmith.42" aria-describedby="nmHelp nmErr" value="${esc(prefill || "")}"><span class="foot" id="nmHelp">Letters, numbers, periods, hyphens, or underscores</span><p class="err" id="nmErr" role="alert"></p></div>
   ${ONLINE ? `<div class="field" style="max-width:160px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="••••" aria-describedby="pinErr"><p class="err" id="pinErr" role="alert"></p></div>` : ""}</div>
   <p class="err" id="err" role="alert"></p><div id="confirmNew"></div>
   <div class="row"><button class="btn" id="go">Continue</button></div>
-  <div class="fb tip guestbox"><h3>Just want to play?</h3><p>No account needed. Progress saves on this device. Make an account anytime to keep it across devices and join the leaderboard.</p><div class="row"><button class="btn brass" id="gD5">Play today's Daily Five</button><button class="btn ghost" id="gTide">Today's Tide</button><button class="btn ghost" id="gGo">Continue as a guest</button></div></div>
   ${others.length ? `<div class="field" style="max-width:none"><span class="lbl">Players on this device</span><div class="row">${others.map(k => `<button class="btn ghost small" data-k="${esc(k)}">${esc(DB.users[k].profile.name)}</button>`).join("")}</div></div>` : ""}
   <p class="foot">${ONLINE ? "New here? Pick a username and PIN. Returning? Enter yours to pick up on any device." : "Offline mode: progress saves in this browser only, and scores won't post to the leaderboard."}</p>`;
   const clearErrs = () => { ["err", "nmErr", "pinErr"].forEach(id => { if ($(id)) $(id).textContent = ""; }); ["nm", "pin"].forEach(id => { if ($(id)) $(id).classList.remove("wrong"); }); };
@@ -358,6 +359,7 @@ function questionBody(q) {
 function render() {
   stats(); map();
   const onb = ONB.includes(S.mode) || !U;
+  const st = document.querySelector(".stats"); if (st) st.style.display = U ? "" : "none";
   $("map").style.display = onb ? "none" : ""; $("tiles").style.display = onb ? "none" : ""; $("tools").style.display = U ? "" : "none";
   document.querySelectorAll("#tiles .tile").forEach(t => t.classList.toggle("on", t.dataset.view === S.mode || (t.dataset.view === "arena" && S.mode === "scene") || (t.dataset.view === "review" && S.mode === "set" && S.set && S.set.kind === "review") || (t.dataset.view === "d5" && (S.mode === "d5done" || (S.mode === "set" && S.set && S.set.kind === "daily"))) || (t.dataset.view === "tide" && S.mode === "set" && S.set && S.set.kind === "tide")));
   const c = $("card");
