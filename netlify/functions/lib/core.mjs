@@ -111,7 +111,10 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const lvl = Number(b.level);
       if (!(Number.isInteger(lvl) && lvl >= 0 && lvl < LV.length)) return json({ error: "Bad level." }, 400);
       const ids = Array.isArray(b.qids) ? b.qids : [];
-      if (ids.length !== 5 || new Set(ids).size !== 5 || !ids.every(id => BYID[id] && BYID[id].lvl === lvl)) return json({ error: "Bad questions." }, 400);
+      // A long accuracy streak (8+) unlocks one "stretch" question from the next level.
+      const up = ids.filter(id => BYID[id] && BYID[id].lvl === lvl + 1).length;
+      const okIds = ids.every(id => BYID[id] && !BYID[id].scenic && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
+      if (ids.length !== 5 || new Set(ids).size !== 5 || !okIds || up > 1 || (up === 1 && (u.astreak || 0) < 8)) return json({ error: "Bad questions." }, 400);
       const id = crypto.randomBytes(12).toString("hex");
       await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });
       return json({ roundId: id });
@@ -136,7 +139,11 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const correct = check(q, b.response);
       const elapsedMs = now() - r.served[i];
       let pts = 0;
-      if (correct) { r.streak += 1; r.right += 1; pts = points(r.lvl, elapsedMs, r.streak, q.type); } else r.streak = 0;
+      const stretch = q.lvl !== r.lvl;
+      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, q.type); if (stretch) pts = Math.round(pts * 1.5); }
+      else { r.streak = 0; if (!stretch) u.astreak = 0; }
+      u.bestStreak = Math.max(u.bestStreak || 0, u.astreak || 0);
+      await users.setJSON(key, u);
       await tally(q.id, correct);
       r.i += 1;
       const finished = r.i === 5;
@@ -144,7 +151,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       r.pts += pts + bonus;
       if (finished) await rounds.delete(rid); else await rounds.setJSON(rid, r);
       if (pts + bonus > 0 || finished) await addPts(u.name, pts + bonus, finished);
-      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, ...(await totals()) });
+      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, astreak: u.astreak || 0, bestStreak: u.bestStreak || 0, stretch, ...(await totals()) });
     }
 
     // ---- Daily Five: shared daily set, kept off the leaderboard ----

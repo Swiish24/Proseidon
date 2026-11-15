@@ -1,4 +1,4 @@
-import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues, dailyIds } from "./bank.js";
+import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssues, dailyIds, orderText, streakMult } from "./bank.js";
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
@@ -38,7 +38,7 @@ async function api(path, body) {
 
 /* ---------- progress helpers ---------- */
 function draw(l, n, avoid = []) {
-  const all = LV[l].q.map(q => q.id).filter(id => !avoid.includes(id));
+  const all = LV[l].q.filter(q => !q.scenic).map(q => q.id).filter(id => !avoid.includes(id));
   U.seen[l] = (U.seen[l] || []).filter(id => BYID[id]);
   let pick = shuffle(all.filter(id => !U.seen[l].includes(id))).slice(0, n);
   if (pick.length < n) {
@@ -50,8 +50,10 @@ function draw(l, n, avoid = []) {
   return pick;
 }
 function skillHit(q, ok) { const k = q.lvl + "|" + q.tag; const s = U.skills[k] || (U.skills[k] = { r: 0, t: 0 }); s.t++; if (ok) s.r++; }
-function addReview(id) { U.review[id] = { due: Date.now() + DAY, wins: 0 }; }
-function reviewResult(id, ok) { const r = U.review[id]; if (!r || r.due > Date.now()) return; if (ok) { r.wins++; if (r.wins >= 2) delete U.review[id]; else r.due = Date.now() + 3 * DAY; } else { r.wins = 0; r.due = Date.now() + DAY; } }
+const STEPS = [1, 3, 7, 21, 60];
+function addReview(id, conf) { const r = U.review[id]; if (r) { r.step = 0; r.due = Date.now() + DAY; if (conf) r.conf = true; return; } U.review[id] = { due: Date.now() + DAY, step: 0, ...(conf ? { conf: true } : {}) }; }
+// Reviews come back after 1, 3, 7, 21, then 60 days. A miss starts the ladder over.
+function reviewResult(id, ok) { const r = U.review[id]; if (!r || r.due > Date.now()) return; if (r.step == null) r.step = r.wins || 0; if (ok) { r.step++; if (r.step >= STEPS.length) delete U.review[id]; else r.due = Date.now() + STEPS[r.step] * DAY; } else { r.step = 0; r.due = Date.now() + DAY; } }
 const savedIds = () => Object.keys(U.review).filter(id => BYID[id]);
 const dueIds = () => savedIds().filter(id => U.review[id].due <= Date.now()).sort((a, b) => U.review[a].due - U.review[b].due);
 function refreshDaily() { const d = U.daily, wk = weekKey(); if (d.fweek !== wk) { d.freezes = 1; d.fweek = wk; } if (d.last) { const g = dayDiff(d.last, today()); if (g > 2 || (g === 2 && d.freezes < 1)) d.streak = 0; } }
@@ -91,7 +93,9 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.rem
 function floatUp(text, cls) { const c = $("card"); requestAnimationFrame(() => { const x = document.createElement("div"); x.className = "xp " + (cls || ""); x.textContent = text; c.appendChild(x); setTimeout(() => x.remove(), 1200); }); }
 function gain(n) { U.xp += n; stats(); floatUp("+" + n + " XP"); const c = $("card"); const r = document.createElement("div"); r.className = "ripple"; r.style.left = "50%"; r.style.top = "60%"; c.appendChild(r); setTimeout(() => r.remove(), 900); }
 function shake() { const c = $("card"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake"); }
-function fresh() { S.sel = null; S.typed = ""; S.answered = false; S.order = shuffle([0, 1, 2, 3]); }
+function fresh() { S.sel = null; S.typed = ""; S.answered = false; S.sure = null; S.order = shuffle([0, 1, 2, 3]); S.stateFor = null; }
+// Set up answer state for tile, multi-tap, and matching questions the first time each one shows.
+function initState(q) { if (S.stateFor === q.id || S.answered) return; S.stateFor = q.id; S.tileOrder = q.tiles ? shuffle(q.tiles.map((_, i) => i)) : []; S.defOrder = q.pairs ? shuffle(q.pairs.map((_, i) => i)) : []; S.sel = ["order", "multi"].includes(q.type) ? [] : q.type === "match" ? q.pairs.map(() => null) : null; }
 
 /* ---------- account screens ---------- */
 function enter(key, res, isNew) {
@@ -179,13 +183,19 @@ function homeView() {
     <div class="mini"><span class="lbl">Leaderboard points</span><b>${AUTH && ONLINE ? PTS.week + " this week" : "Offline"}</b><span class="foot">${AUTH && ONLINE ? PTS.all + " all-time" : "Play online to compete."}</span></div>
   </div>
   <div class="badges" aria-label="Level badges">${PLACES.map((pl, k) => `<span class="bdg ${U.best[k] >= 4 ? "got" : ""}" title="${pl}${U.best[k] >= 4 ? " · cleared" : " · not cleared yet"}">${trident}<i>${k + 1}</i></span>`).join("")}</div>
-  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="ar">Enter the Agora</button></div>`;
+  <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
+  ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
+  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="mix">Mix look-alikes</button><button class="btn ghost" id="ar">Enter the Agora</button></div>
+  <p class="foot conf">Confidence check: <b>${U.conf ? "On" : "Off"}</b>. ${U.conf ? "You'll tap “sure” or “not sure” before checking." : "Turn it on to tap “sure” or “not sure” before checking. Confident mistakes get extra review."} <button class="link small" id="conf">${U.conf ? "Turn off" : "Turn on"}</button></p>`;
   $("go").onclick = () => start(S.lvl);
   $("tide").onclick = startTide;
   $("d5").onclick = startDaily;
   if ($("rv")) $("rv").onclick = startReview;
   if ($("dr")) $("dr").onclick = () => startDrill(weak.l, weak.tag);
   $("ar").onclick = () => { S.mode = "arena"; render(); };
+  $("mix").onclick = startMix;
+  $("conf").onclick = () => { U.conf = !U.conf; save(); render(); };
+  if ($("skipup")) $("skipup").onclick = () => start(S.lvl + 1);
   $("go").focus();
 }
 function startReview() {
@@ -193,6 +203,13 @@ function startReview() {
   if (!all.length) { S.mode = "msg"; S.msg = ["Returning Tide · Review", "Nothing to review yet.", "Questions you miss in level rounds land here and come back after 1 day, then 3 days. Answer one right twice in a row and it leaves the queue."]; return render(); }
   const ids = (due.length ? due : shuffle(all)).slice(0, 5);
   S.set = { kind: "review", early: !due.length, title: due.length ? "Returning Tide" : "Returning Tide (early)", ids, i: 0, res: [] }; S.mode = "set"; fresh(); render();
+}
+// Look-alike skills mixed together: telling them apart is the skill.
+const LOOKALIKES = [[2, "A"], [3, "F"], [3, "S"], [3, "P"], [3, "W"], [7, "P"], [7, "V"]];
+function startMix() {
+  const groups = LOOKALIKES.map(([l, t]) => shuffle(LV[l].q.filter(q => q.tag === t && !q.scenic && ["mc", "tap", "match"].includes(q.type)).map(q => q.id)));
+  const ids = []; for (let k = 0; ids.length < 6 && k < 20; k++) for (const g of shuffle(groups)) { if (ids.length < 6 && g[k] && !ids.includes(g[k])) ids.push(g[k]); }
+  S.set = { kind: "mix", title: "Look-alike mix", ids: shuffle(ids), i: 0, res: [] }; S.mode = "set"; fresh(); render();
 }
 function startDrill(l, tagKey) { const ids = shuffle(LV[l].q.filter(q => q.tag === tagKey).map(q => q.id)).slice(0, 5); S.set = { kind: "drill", title: "Drill · " + LV[l].skills[tagKey], ids, i: 0, res: [] }; S.mode = "set"; fresh(); render(); }
 function weakView() {
@@ -251,7 +268,8 @@ async function lbView() {
 /* ---------- rounds ---------- */
 function start(k) {
   if (!U) return;
-  S.lvl = k; S.round = draw(k, 5); U.last[k] = S.round.slice(); S.qi = 0; S.res = []; S.mode = "q"; S.hint = false; S.served = {}; S.qStart = {}; S.roundPts = 0;
+  S.lvl = k; S.round = draw(k, 5); U.last[k] = S.round.slice();
+  if ((U.streak || 0) >= 8 && k < LV.length - 1 && AUTH && ONLINE) { const up = draw(k + 1, 3).find(id => BYID[id].type === "mc"); if (up) S.round[4] = up; } S.qi = 0; S.res = []; S.mode = "q"; S.hint = false; S.served = {}; S.qStart = {}; S.roundPts = 0;
   S.rp = AUTH && ONLINE ? api("/round/start", { ...AUTH, level: k, qids: S.round }).then(r => r.roundId).catch(() => null) : Promise.resolve(null);
   fresh(); save(); render();
 }
@@ -267,6 +285,16 @@ function questionBody(q) {
     h += `<div class="opts" role="group">` + S.order.map((o, pos) => { let c = "opt"; if (S.answered) { if (o === q.a) c += " right"; else if (o === S.sel) c += " wrong"; } else if (o === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${o}"><span class="k">${pos + 1}</span><span>${esc(q.o[o])}</span></button>`; }).join("") + `</div>`;
   } else if (q.type === "tap") {
     h += `<p class="foot">Tap a word in the sentence.</p><div class="toks">` + q.s.map((w, k) => { let c = "tok"; if (S.answered) { if (k === q.a) c += " right"; else if (k === S.sel) c += " wrong"; } else if (k === S.sel) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-pick="${k}">${esc(w)}</button>`; }).join("") + `</div>`;
+  } else if (q.type === "order") {
+    const sel = S.sel || [], text = orderText(q, sel), ok = S.answered && check(q, sel);
+    h += `<p class="foot">${S.answered ? "" : "Tap or drag the tiles to build it. Tap a placed tile to remove it. Not every tile has to be used."}</p><div class="build ${S.answered ? (ok ? "right" : "wrong") : ""}" id="build" aria-label="Your answer">${sel.length ? sel.map((ti, k) => `<button class="tile2 placed" ${S.answered ? "disabled" : ""} data-orem="${k}" draggable="${!S.answered}" data-odrag="p${k}">${esc(q.tiles[ti])}</button>`).join("") : `<span class="foot">Your ${q.join === "" ? "word" : "sentence"} appears here.</span>`}</div>`;
+    if (!S.answered) h += `<div class="pool">${S.tileOrder.filter(ti => !sel.includes(ti)).map(ti => `<button class="tile2" data-oadd="${ti}" draggable="true" data-odrag="t${ti}">${esc(q.tiles[ti])}</button>`).join("")}</div>`;
+    else if (!ok) h += `<p class="foot">You built: “${esc(text)}”</p>`;
+  } else if (q.type === "multi") {
+    const sel = S.sel || [];
+    h += `<p class="foot">Tap every word that fits, then check.</p><div class="toks">` + q.s.map((w, k) => { let c = "tok"; if (S.answered) { if (q.a.includes(k)) c += sel.includes(k) ? " right" : " missed"; else if (sel.includes(k)) c += " wrong"; } else if (sel.includes(k)) c += " sel"; return `<button class="${c}" ${S.answered ? "disabled" : ""} data-mtog="${k}">${esc(w)}</button>`; }).join("") + `</div>`;
+  } else if (q.type === "match") {
+    h += `<div class="match">` + q.pairs.map((pr, i) => { const v = S.sel ? S.sel[i] : null; const st = S.answered ? (v === i ? "right" : "wrong") : ""; return `<label class="mrow ${st}"><b>${esc(pr[0])}</b><select class="inp" data-msel="${i}" ${S.answered ? "disabled" : ""}><option value="">Choose a match</option>${S.defOrder.map(d => `<option value="${d}" ${v === d ? "selected" : ""}>${esc(q.pairs[d][1])}</option>`).join("")}</select>${S.answered && v !== i ? `<span class="foot">Answer: ${esc(pr[1])}</span>` : ""}</label>`; }).join("") + `</div>`;
   } else if (q.type === "fix") {
     const st = S.answered ? (check(q, S.sel) ? "right" : "wrong") : "";
     h += `<div class="orig"><span class="lbl">Original</span><p>${esc(q.s)}</p></div><div class="field" style="max-width:none"><label class="lbl" for="ans">Your rewrite</label><textarea id="ans" class="inp ${st}" rows="3" autocapitalize="sentences" spellcheck="true" placeholder="Rewrite the sentence here" ${S.answered ? "disabled" : ""}>${esc(S.answered ? S.sel : S.typed)}</textarea><span class="foot">${q.max ? `Aim for ${q.max} words or fewer. ` : ""}Press Ctrl+Enter or Cmd+Enter to check.</span></div>`;
@@ -298,15 +326,18 @@ function render() {
   if (S.mode === "d5done") return dailyDone();
   const L = LV[S.lvl];
   if (S.mode === "lesson") {
-    c.innerHTML = `<div class="top"><span class="pill scenic">Scenic route · ${esc(L.t)}</span></div><div class="fb lesson"><h3>Quick lesson</h3><p>${esc(L.l)}</p></div><div class="row"><button class="btn brass" id="go">Try 2 practice questions</button><button class="btn ghost" id="skipd">Skip the detour</button></div>`;
+    c.innerHTML = `<div class="top"><span class="pill scenic">Scenic route · ${esc(L.t)}</span></div><div class="fb lesson"><h3>Quick lesson</h3><p>${esc(L.l)}</p></div><div class="row"><button class="btn brass" id="go">Practice, then a writing task</button><button class="btn ghost" id="skipd">Skip the detour</button></div>`;
     $("go").onclick = () => { S.mode = "prac"; S.pi = 0; fresh(); render(); }; $("skipd").onclick = back; $("go").focus(); return;
   }
   const q = curQ(), main = S.mode === "q", pl = S.mode === "place", set = S.mode === "set";
+  initState(q);
   if (main && !S.answered) { serve(S.qi); if (!S.qStart[S.qi]) S.qStart[S.qi] = performance.now(); }
   let dots = "";
   if (main || pl || set) { const arr = pl ? S.pres : set ? S.set.res : S.res, n = set ? S.set.ids.length : 5, cur = set ? S.set.i : S.qi; dots = `<div class="dots" aria-label="Question ${cur + 1} of ${n}">${Array.from({ length: n }, (_, k) => `<span class="dot ${arr[k] === true ? "ok" : arr[k] === false ? "bad" : k === cur ? "now" : ""}"></span>`).join("")}</div>`; }
-  const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : `Scenic route · practice ${S.pi + 1} of 2`;
-  let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(label)}</span>${dots}</div>`;
+  const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : S.pi === 1 ? `Scenic route · writing lab` : `Scenic route · practice`;
+  const stretchQ = main && q.lvl !== S.lvl;
+  let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(stretchQ ? `Stretch question · Level ${q.lvl + 1} · 1.5x points` : label)}</span>${dots}</div>`;
+  if (main && (U.streak || 0) >= 2) h += `<div class="streak"><span>🔥 ${U.streak} in a row</span><span class="foot">Accuracy streak · ${streakMult(U.streak + 1).toFixed(2)}x points on your next right answer</span></div>`;
   if (main && AUTH && ONLINE && !S.answered && q.type !== "fix") { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
   h += questionBody(q) + `<p class="err" id="err"></p>`;
   if (S.hint && main && !S.answered) h += `<div class="fb tip"><h3>Coach's tip</h3><p>${esc(L.l)}</p></div>`;
@@ -325,13 +356,16 @@ function render() {
         if (others.length) body += `<details class="why"><summary>Why the ${ok ? "other answers are" : "remaining answers are"} wrong</summary><ul>${others.map(why).join("")}</ul></details>`;
       }
     }
-    h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}</h3>${body}</div>`;
+    h += `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? rand(PRAISE) : rand(MISS)}${ok && main && U.streak >= 3 ? ` ${U.streak} in a row.` : ""}${!ok && main && S.lostStreak >= 3 ? ` Streak of ${S.lostStreak} ended.` : ""}</h3>${body}</div>`;
     if (set && S.set.kind === "daily") h += `<p class="foot dpct">${esc(dailyPct(q.id, S.set.i))}</p>`;
+    if (S.sure === true && !ok) h += `<div class="fb tip"><h3>Confident miss</h3><p>You were sure, and it was wrong. These are the mistakes that stick best once corrected, so it goes into your review queue.</p></div>`;
+    if (S.sure === false && ok) h += `<p class="foot">Right, but you weren't sure. It will come back once in review to lock it in.</p>`;
+    if (stretchQ && !ok) h += `<p class="foot">Stretch questions don't break your streak.</p>`;
     h += `<div class="report"><button class="link small" id="rep">Something wrong with this question? Report it</button><div id="repBox"></div></div>`;
-    if (main && !ok) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson and two practice questions, then back to the climb. This question also goes into your review queue.</p></div>`;
+    if (main && !ok) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson, one practice question, and one writing task on this skill, then back to the climb. This question also goes into your review queue.</p></div>`;
   }
   h += `<div class="row">`;
-  if (!S.answered) { h += `<button class="btn" id="go">Check answer</button>`; if (main) h += `<button class="btn ghost" id="hint">${S.hint ? "Hide tip" : "Coach's tip"}</button>`; }
+  if (!S.answered) { h += U.conf && q.type !== "fix" && q.type !== "type" ? `<button class="btn" id="go">Check · I'm sure</button><button class="btn ghost" id="go2">Check · Not sure</button>` : `<button class="btn" id="go">Check answer</button>`; if (main) h += `<button class="btn ghost" id="hint">${S.hint ? "Hide tip" : "Coach's tip"}</button>`; }
   else {
     const ok = check(q, S.sel);
     if (pl) h += `<button class="btn" id="go">${S.qi < 4 ? "Next question" : "See my starting level"}</button>`;
@@ -341,31 +375,56 @@ function render() {
   }
   h += "</div>";
   c.innerHTML = h;
-  $("go").onclick = act;
+  $("go").onclick = () => { if (!S.answered && $("go2")) S.sure = true; act(); };
+  if ($("go2")) $("go2").onclick = () => { S.sure = false; act(); };
+  if (!S.answered) wireBuild(q);
   if ($("hint")) $("hint").onclick = () => { S.hint = !S.hint; render(); };
   if ($("skipd")) $("skipd").onclick = back;
   if ($("ans") && !S.answered) { $("ans").oninput = e => { S.typed = e.target.value; $("err").textContent = ""; }; $("ans").onkeydown = e => { if (e.key === "Enter" && (q.type !== "fix" || e.ctrlKey || e.metaKey)) { e.preventDefault(); act(); } }; $("ans").focus(); }
   if ($("rep")) $("rep").onclick = () => openReport(q);
   else $("go").focus();
 }
+function wireBuild(q) {
+  document.querySelectorAll("[data-oadd]").forEach(b => b.onclick = () => { S.sel.push(+b.dataset.oadd); render(); });
+  document.querySelectorAll("[data-orem]").forEach(b => b.onclick = () => { S.sel.splice(+b.dataset.orem, 1); render(); });
+  document.querySelectorAll("[data-mtog]").forEach(b => b.onclick = () => { const k = +b.dataset.mtog, i = S.sel.indexOf(k); if (i < 0) S.sel.push(k); else S.sel.splice(i, 1); render(); });
+  document.querySelectorAll("[data-msel]").forEach(x => x.onchange = () => { S.sel[+x.dataset.msel] = x.value === "" ? null : +x.value; $("err").textContent = ""; });
+  // Drag and drop (mouse). Tapping works everywhere, including phones.
+  let drag = null;
+  document.querySelectorAll("[data-odrag]").forEach(b => { b.ondragstart = e => { drag = b.dataset.odrag; e.dataTransfer.setData("text/plain", drag); }; });
+  const build = $("build"); if (!build) return;
+  const place = (target) => {
+    if (!drag) return; const at = target ? +target.dataset.orem : S.sel.length;
+    if (drag[0] === "t") { const ti = +drag.slice(1); S.sel.splice(isNaN(at) ? S.sel.length : at, 0, ti); }
+    else { const from = +drag.slice(1), ti = S.sel.splice(from, 1)[0]; let to = isNaN(at) ? S.sel.length : at; if (from < to) to--; S.sel.splice(to, 0, ti); }
+    drag = null; render();
+  };
+  build.ondragover = e => { e.preventDefault(); build.classList.add("over"); };
+  build.ondragleave = () => build.classList.remove("over");
+  build.ondrop = e => { e.preventDefault(); place(e.target.closest("[data-orem]")); };
+}
 function pick(o) { if (S.answered) return; S.sel = o; render(); }
 function act() {
   const q = curQ(), main = S.mode === "q", pl = S.mode === "place", set = S.mode === "set";
   if (!S.answered) {
     if (q.type === "type" || q.type === "fix") { if (!S.typed.trim()) { $("err").textContent = q.type === "fix" ? "Write your rewrite first." : "Type an answer first."; return; } S.sel = S.typed.trim(); }
+    else if (q.type === "order" || q.type === "multi") { if (!S.sel.length) { $("err").textContent = q.type === "order" ? "Place at least one tile first." : "Tap at least one word first."; return; } }
+    else if (q.type === "match") { if (S.sel.some(x => x == null)) { $("err").textContent = "Choose a match for every item first."; return; } }
     else if (S.sel === null) { $("err").textContent = q.type === "tap" ? "Tap a word first." : "Pick an answer first."; return; }
     S.answered = true; S.hint = false;
     const ok = check(q, S.sel);
     U.total++; if (ok) U.right++; skillHit(q, ok);
     if (!main) queueStat(q.id, ok);
     if (pl) { S.pres[S.qi] = ok; if (ok) gain(5); else shake(); }
-    else if (set) { S.set.res[S.set.i] = ok; if (S.set.kind === "review" || (S.set.kind === "tide" && U.review[q.id])) reviewResult(q.id, ok); if (ok) gain(5); else { shake(); if (S.set.kind === "tide" && !U.review[q.id]) addReview(q.id); } }
+    else if (set) { if (S.sure === true && !ok) addReview(q.id, true); if (S.sure === false && ok && !U.review[q.id]) addReview(q.id); S.set.res[S.set.i] = ok; if (S.set.kind === "review" || (S.set.kind === "tide" && U.review[q.id])) reviewResult(q.id, ok); if (ok) gain(5); else { shake(); if (S.set.kind === "tide" && !U.review[q.id]) addReview(q.id); } }
     else if (main) {
       S.res[S.qi] = ok;
-      if (ok) { U.streak++; gain(10 + (U.streak >= 3 ? 5 : 0)); } else { U.streak = 0; addReview(q.id); shake(); }
+      const stretch = q.lvl !== S.lvl; S.lostStreak = 0;
+      if (ok) { U.streak++; U.bestStreak = Math.max(U.bestStreak || 0, U.streak); gain(10 + (U.streak >= 3 ? 5 : 0)); if ([10, 25, 50, 100].includes(U.streak)) floatUp(`🔥 ${U.streak} in a row!`, "pts"); if (S.sure === false) addReview(q.id); }
+      else { if (!stretch) { S.lostStreak = U.streak; U.streak = 0; } addReview(q.id, S.sure === true); shake(); }
       const i = S.qi, resp = S.sel;
       (S.served[i] || Promise.resolve(null)).then(id => id ? api("/round/answer", { ...AUTH, roundId: id, i, response: resp }) : null).then(r => {
-        if (!r) return; PTS = { week: r.weekPts, all: r.allPts }; S.roundPts = r.roundPts;
+        if (!r) return; PTS = { week: r.weekPts, all: r.allPts }; S.roundPts = r.roundPts; if (typeof r.astreak === "number") { U.streak = r.astreak; U.bestStreak = Math.max(U.bestStreak || 0, r.bestStreak || 0); save(); }
         if (r.points + r.bonus > 0) floatUp(`+${r.points + r.bonus} pts`, "pts");
         stats(); if ($("rpts")) $("rpts").textContent = `${r.roundPts} leaderboard points this round`;
       }).catch(() => {});
@@ -374,8 +433,15 @@ function act() {
   }
   if (pl) { if (S.qi < 4) { S.qi++; fresh(); } else S.mode = "placed"; render(); return; }
   if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else if (S.set.kind === "daily") { finishDaily(); return; } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
-  if (main) { if (check(q, S.sel)) advance(); else { S.prac = draw(S.lvl, 2, S.round); save(); S.mode = "lesson"; render(); } return; }
+  if (main) { if (check(q, S.sel)) advance(); else { S.prac = [draw(S.lvl, 1, S.round)[0], scenicPick(q.lvl, q.tag)]; save(); S.mode = "lesson"; render(); } return; }
   if (S.pi < 1) { S.pi++; fresh(); render(); } else back();
+}
+function scenicPick(l, tag) {
+  const pool = LV[l].q.filter(x => x.scenic), seen = U.scenicSeen || (U.scenicSeen = []);
+  const fresh1 = a => a.filter(x => !seen.includes(x.id));
+  const pick = [fresh1(pool.filter(x => x.tag === tag)), pool.filter(x => x.tag === tag), fresh1(pool), pool].find(a => a.length);
+  const q = pick[Math.floor(Math.random() * pick.length)];
+  U.scenicSeen = seen.concat(q.id).slice(-40); return q.id;
 }
 function back() { S.mode = "q"; advance(); }
 function advance() {
@@ -398,7 +464,7 @@ function done() {
 }
 function setDone() {
   const st = S.set, sc = st.res.filter(Boolean).length;
-  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? (d5Today() ? "That's today. Your Tide and the Daily Five are both done. +15 XP bonus. See you tomorrow." : "Today's Tide is done. +15 XP bonus. The Daily Five is still waiting.") : st.kind === "review" ? (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
+  $("card").innerHTML = `<span class="pill scenic">${esc(st.title)}</span><p class="big">${sc} / ${st.ids.length}</p><p class="lead">${st.kind === "tide" ? (d5Today() ? "That's today. Your Tide and the Daily Five are both done. +15 XP bonus. See you tomorrow." : "Today's Tide is done. +15 XP bonus. The Daily Five is still waiting.") : st.kind === "mix" ? "Mixing look-alikes is harder than drilling one at a time. That extra effort is what helps you tell them apart later." : st.kind === "review" ? "Reviews feel harder than new questions. That's the point: pulling an answer back after a gap is what makes it last. " + (st.early ? "Early practice doesn't change your review schedule. Due questions count." : `${savedIds().length} question${savedIds().length === 1 ? "" : "s"} left in your review queue.`) : "Drills sharpen one skill at a time. Check your weak spots to see if it moved."}</p><div class="row"><button class="btn" id="hm">Back to home</button><button class="btn ghost" id="ws">See weak spots</button></div>`;
   $("hm").onclick = home; $("ws").onclick = () => { S.mode = "weak"; render(); }; $("hm").focus();
 }
 

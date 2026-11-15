@@ -1,0 +1,73 @@
+// V7 content.
+// LAB[level]: scenic-route writing tasks (shown after a miss, matched to the missed skill).
+//   order: tap or drag tiles into a sentence. acc = accepted sentences. Extra tiles are decoys. join "" builds words.
+//   multi: tap every word that fits the prompt. fixes = corrections shown after.
+// MATCH[level]: match each term to its definition. Used in regular play.
+export const LAB = [
+// Level 1
+[{type:"order",p:"Build one sentence that shows contrast.",tiles:["The","plan","was","good",",","but","and","the","budget","was","tight","."],acc:["The plan was good, but the budget was tight."],e:"“But” shows contrast. “And” would just add a second fact.",tag:"C"},
+ {type:"order",p:"Build a sentence where the adverb tells how she checked.",tiles:["She","checked","the","numbers","carefully","."],acc:["She checked the numbers carefully.","She carefully checked the numbers."],e:"“Carefully” describes the verb “checked.” It can sit before the verb or at the end.",tag:"M"},
+ {type:"order",p:"Join these with “and” so “Maria” appears only once: “Maria wrote the memo. Maria sent it Friday.”",tiles:["Maria","wrote","the","memo","and","sent","it","Friday","."],acc:["Maria wrote the memo and sent it Friday."],e:"One subject can share two verbs: wrote and sent.",tag:"V"},
+ {type:"multi",p:"Tap the 2 words used wrong in this email.",s:["Hi","team,","I","feel","badly","about","the","delay.","We","did","good","on","the","audit","though."],a:[4,10],fixes:["bad","well"],e:"After “feel,” use the adjective: bad. To describe how you did something, use the adverb: well.",tag:"M"}],
+// Level 2
+[{type:"order",p:"Fix the run-on “We missed the bus we were late” by building one correct sentence.",tiles:["We","missed","the","bus",",","so","we","were","late","."],acc:["We missed the bus, so we were late."],e:"A comma plus a joining word like “so” connects two full sentences.",tag:"F"},
+ {type:"order",p:"Turn the fragment “Because the server crashed” into a full sentence.",tiles:["Because","the","server","crashed",",","we","lost","the","file","."],acc:["Because the server crashed, we lost the file.","We lost the file because the server crashed."],e:"A “because” clause needs a main clause to lean on.",tag:"F"},
+ {type:"order",p:"Build the sentence with the verb that agrees.",tiles:["Each","of","the","reps","has","have","a","login","."],acc:["Each of the reps has a login."],e:"“Each” is singular, so it takes “has.”",tag:"S"},
+ {type:"multi",p:"Tap the 3 verbs that don't agree with their subjects.",s:["The","list","of","clients","are","ready.","Each","rep","have","a","copy,","and","the","boxes","by","the","door","is","full."],a:[4,8,17],fixes:["is","has","are"],e:"Find the real subject: the list is, each rep has, the boxes are.",tag:"O"}],
+// Level 3
+[{type:"order",p:"Join “I sent the memo” and “Nobody replied” with a semicolon.",tiles:["I","sent","the","memo",";",",","nobody","replied","."],acc:["I sent the memo; nobody replied."],e:"A semicolon can join two full sentences. A comma alone can't.",tag:"J"},
+ {type:"order",p:"Place the commas around the extra information.",tiles:["Dana",",","our","new","analyst",",","starts","Monday","."],acc:["Dana, our new analyst, starts Monday."],e:"“Our new analyst” is extra, so commas go on both sides.",tag:"C"},
+ {type:"order",p:"Introduce the list with a colon.",tiles:["Bring","three","things",":","a","pen",",","a","badge",",","and","a","laptop","."],acc:["Bring three things: a pen, a badge, and a laptop."],e:"A colon after a full sentence introduces a list.",tag:"P"},
+ {type:"multi",p:"Tap the 3 apostrophe mistakes.",s:["Its","time","to","review","the","clients","files,","and","the","firm","updated","it's","website."],a:[0,5,11],fixes:["It's","clients'","its"],e:"“It's” means it is. Plural ownership adds an apostrophe after the s. Possessive “its” has none.",tag:"A"}],
+// Level 4
+[{type:"order",p:"Build the sentence with the right pronoun.",tiles:["Please","send","the","file","to","Jo","and","me","I","."],acc:["Please send the file to Jo and me."],e:"Drop “Jo and”: “send the file to me.”",tag:"P"},
+ {type:"order",p:"Build the sentence with the right word.",tiles:["The","new","rule","will","affect","effect","our","schedule","."],acc:["The new rule will affect our schedule."],e:"You need a verb meaning “change”: affect.",tag:"F"},
+ {type:"order",p:"Build the sentence with the right word.",tiles:["We","had","fewer","less","complaints","this","year","."],acc:["We had fewer complaints this year."],e:"You can count complaints, so “fewer.”",tag:"W"},
+ {type:"multi",p:"Tap the 3 words that are wrong in this message.",s:["Their","going","to","loose","the","account","if","we","have","less","calls","this","week."],a:[0,3,9],fixes:["They're","lose","fewer"],e:"They're = they are. Lose = misplace. Fewer = countable things like calls.",tag:"S"}],
+// Level 5
+[{type:"order",p:"Combine with “although”: “The plan is risky. We will try it.”",tiles:["Although","the","plan","is","risky",",","we","will","try","it","."],acc:["Although the plan is risky, we will try it."],e:"An opening “although” clause takes a comma before the main clause.",tag:"D"},
+ {type:"order",p:"Combine with “who”: “The analyst wrote the report. She won an award.”",tiles:["The","analyst","who","wrote","the","report","won","an","award","."],acc:["The analyst who wrote the report won an award."],e:"“Who wrote the report” tells you which analyst, so no commas.",tag:"R"},
+ {type:"order",p:"Combine with “which” and commas: “Our office opened in 2019. It is downtown.”",tiles:["Our","office",",","which","opened","in","2019",",","is","downtown","."],acc:["Our office, which opened in 2019, is downtown."],e:"“Which opened in 2019” is extra detail, so commas go around it.",tag:"R"},
+ {type:"multi",p:"Tap the 2 words that start dependent clauses.",s:["We","stayed","because","the","audit","ran","long,","although","nobody","minded."],a:[2,7],e:"“Because” and “although” turn full ideas into clauses that can't stand alone.",tag:"D"}],
+// Level 6
+[{type:"order",p:"Rebuild in active voice: “The report was approved by the board.”",tiles:["The","board","approved","the","report","was","by","."],acc:["The board approved the report."],e:"Put the doer first. “Was” and “by” are left over.",tag:"A"},
+ {type:"order",p:"Rebuild without the filler: “There are three reps who need training.”",tiles:["Three","reps","need","training","there","are","who","."],acc:["Three reps need training."],e:"Start with the real subject and cut “there are ... who.”",tag:"H"},
+ {type:"order",p:"Build the plain-language version of “Prior to the meeting, please utilize the form.”",tiles:["Before","the","meeting",",","please","use","the","form","prior","to","utilize","."],acc:["Before the meeting, please use the form.","Please use the form before the meeting."],e:"“Before” and “use” say the same thing in plain words.",tag:"P"},
+ {type:"multi",p:"Tap the 3 filler words you could cut.",s:["We","basically","need","to","really","finalize","the","plan","very","soon."],a:[1,4,8],e:"“Basically,” “really,” and “very” add no meaning here.",tag:"H"}],
+// Level 7
+[{type:"order",p:"Build a simile.",tiles:["The","inbox","was","like","a","flood","is","."],acc:["The inbox was like a flood."],e:"“Like” makes it a comparison: a simile.",tag:"C"},
+ {type:"order",p:"Build the sentence with parallel structure.",tiles:["We","will","review","the","data",",","test","the","plan",",","and","launch","on","time","launching","."],acc:["We will review the data, test the plan, and launch on time."],e:"Each item starts with the same verb form: review, test, launch.",tag:"R"},
+ {type:"order",p:"Build an understatement that denies the opposite (litotes).",tiles:["That","was","not","a","bad","result","great","."],acc:["That was not a bad result."],e:"“Not bad” praises by denying the opposite.",tag:"X"},
+ {type:"multi",p:"Tap every word that signals a comparison.",s:["She","ran","like","the","wind","and","worked","as","hard","as","a","mule."],a:[2,7,9],e:"“Like” and “as ... as” set up similes.",tag:"C"}],
+// Level 8
+[{type:"order",p:"Build the formal sentence.",tiles:["If","I","were","was","in","charge",",","I","would","change","it","."],acc:["If I were in charge, I would change it."],e:"An imagined situation takes “were.”",tag:"S"},
+ {type:"order",p:"Fix “Walking into the office, the alarm went off” by building a clear sentence.",tiles:["Walking","into","the","office",",","I","heard","the","alarm","."],acc:["Walking into the office, I heard the alarm."],e:"The person walking has to come right after the opening phrase.",tag:"V"},
+ {type:"order",p:"Build the sentence with the right pronoun.",tiles:["Between","you","and","me","I",",","the","plan","is","risky","."],acc:["Between you and me, the plan is risky."],e:"After a preposition like “between,” use “me.”",tag:"P"},
+ {type:"multi",p:"Tap the 3 words that are wrong in formal writing.",s:["The","committee","have","met,","and","neither","of","the","proposals","were","approved.","I","wish","I","was","there."],a:[2,9,14],fixes:["has","was","were"],e:"The committee has. Neither was. I wish I were.",tag:"A"}],
+// Level 9
+[{type:"order",p:"Build the word from its parts.",tiles:["un","happi","ness","ly"],join:"",acc:["unhappiness"],e:"un- + happy + -ness: three morphemes.",tag:"M"},
+ {type:"order",p:"Build the past-tense word meaning “played again.”",tiles:["re","play","ed","pre"],join:"",acc:["replayed"],e:"re- (again) + play + -ed (past).",tag:"M"},
+ {type:"order",p:"Build the blend of “smoke” and “fog.”",tiles:["sm","og","oke","fo"],join:"",acc:["smog"],e:"A blend keeps parts of two words: sm(oke) + (f)og.",tag:"W"},
+ {type:"multi",p:"Tap every free morpheme (a part that can stand alone as a word).",s:["un-","kind","-ness","care","-ful","re-","write"],a:[1,3,6],e:"“Kind,” “care,” and “write” are words on their own. The others must attach.",tag:"M"}],
+// Level 10
+[{type:"order",p:"Rebuild “Your numbers are wrong” as a request that protects the listener's face.",tiles:["Could","we","look","at","the","numbers","together","?","Your","are","wrong"],acc:["Could we look at the numbers together?"],e:"A softened request avoids a direct threat to the listener's self-image.",tag:"U"},
+ {type:"order",p:"Rebuild “The old man the boat” so it reads easily.",tiles:["The","old","people","crew","the","boat","man","."],acc:["The old people crew the boat."],e:"Swapping “man” for “crew” removes the garden-path trap.",tag:"L"},
+ {type:"order",p:"Build an enthymeme: an argument that leaves its main premise unstated.",tiles:["She's","a","lawyer",",","so","she","knows","contracts","All","lawyers","know","."],acc:["She's a lawyer, so she knows contracts."],e:"The unstated premise is “all lawyers know contracts.”",tag:"C"},
+ {type:"multi",p:"Tap every deictic word (its meaning depends on who, where, or when it's said).",s:["I'll","meet","you","here","tomorrow","at","the","office."],a:[0,2,3,4],e:"“I,” “you,” “here,” and “tomorrow” all depend on the speaker's situation.",tag:"U"}]
+];
+
+export const MATCH = [
+[{type:"match",p:"Match each word to its part of speech.",pairs:[["quickly","Adverb"],["analyst","Noun"],["approve","Verb"],["careful","Adjective"]],e:"Adverbs tell how, nouns name, verbs act, and adjectives describe nouns.",tag:"M"}],
+[{type:"match",p:"Match each example to what it is.",pairs:[["We left.","Complete sentence"],["Because we left.","Fragment"],["We left we ran.","Run-on"],["We left, we ran.","Comma splice"]],e:"A comma alone can't join two full sentences, and nothing at all is a run-on.",tag:"F"}],
+[{type:"match",p:"Match each mark to its job.",pairs:[[";","Joins two full sentences"],[":","Introduces a list or explanation"],["'","Shows ownership or a missing letter"],[",","Separates items or extra details"]],e:"Each mark has one main job. Mixing them up is a common source of errors.",tag:"P"}],
+[{type:"match",p:"Match each word to when you use it.",pairs:[["affect","Usually a verb: to influence"],["effect","Usually a noun: a result"],["fewer","For things you can count"],["less","For amounts you can't count"]],e:"Affect acts, effect results. Fewer counts, less measures.",tag:"W"}],
+[{type:"match",p:"Match each sentence to its structure.",pairs:[["We left.","Simple"],["We left, and they stayed.","Compound"],["We left because it rained.","Complex"],["Because it rained, we left, and they stayed.","Compound-complex"]],e:"Count the clauses: independent ones make it compound, dependent ones make it complex.",tag:"T"}],
+[{type:"match",p:"Match each stiff phrase to its plain swap.",pairs:[["utilize","use"],["commence","begin"],["prior to","before"],["in the event that","if"]],e:"Plain words read faster and sound more confident.",tag:"P"}],
+[{type:"match",p:"Match each device to its definition.",pairs:[["Simile","A comparison using like or as"],["Metaphor","A comparison without like or as"],["Hyperbole","Deliberate exaggeration"],["Litotes","Understatement by denying the opposite"]],e:"Two compare, one exaggerates, one understates.",tag:"C"},
+ {type:"match",p:"Match each appeal to what it relies on.",pairs:[["Ethos","Credibility"],["Pathos","Emotion"],["Logos","Logic and evidence"],["Kairos","Timing"]],e:"The first three are Aristotle's modes of persuasion. Kairos is the right moment.",tag:"A"}],
+[{type:"match",p:"Match each form to its meaning.",pairs:[["lie","To recline (no object)"],["lay","To put something down"],["lain","Past participle of “lie”"],["laid","Past tense of “lay”"]],e:"You lie down. You lay something down. Yesterday you laid it there, and it has lain there since.",tag:"V"}],
+[{type:"match",p:"Match each field to what it studies.",pairs:[["Syntax","Sentence structure"],["Semantics","Meaning"],["Phonetics","How speech sounds are made"],["Pragmatics","Meaning in context"]],e:"Structure, meaning, sound, and situation.",tag:"F"},
+ {type:"match",p:"Match each word to how it was formed.",pairs:[["smog","Blend"],["ad","Clipping"],["NASA","Acronym"],["notebook","Compound"]],e:"Merge parts, cut short, take first letters, or join whole words.",tag:"W"}],
+[{type:"match",p:"Match each of Grice's maxims to what it asks.",pairs:[["Quantity","Say as much as needed"],["Quality","Say what's true"],["Relation","Be relevant"],["Manner","Be clear and orderly"]],e:"Together they describe how cooperative conversation works.",tag:"U"},
+ {type:"match",p:"Match each term to its meaning.",pairs:[["Deliberative","Argues about future choices"],["Judicial","Argues about past actions"],["Epideictic","Praises or blames in the present"],["Enthymeme","An argument with an unstated premise"]],e:"Aristotle's three kinds of rhetoric, plus his favorite form of argument.",tag:"C"}]
+];

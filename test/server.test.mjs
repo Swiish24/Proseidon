@@ -70,7 +70,7 @@ for (let i = 0; i < 5; i++) {
 }
 console.log("points per question (fast<1s, 4s, 30s, wrong, 2s):", pts);
 assert.equal(pts[0], 50, "under 1s gets no speed bonus");
-assert.ok(pts[1] > 50 && pts[2] === Math.round(50 * 1.2), "speed bonus fades, streak multiplier applies");
+assert.ok(pts[1] > 50 && pts[2] === Math.round(50 * 1.08), "speed bonus fades, accuracy streak multiplier applies (3 in a row = 1.08)");
 assert.equal(pts[3], 0);
 assert.equal((await call("round/answer", { user: "Dan_W", token, roundId: rid, i: 5, response: 0 })).status, 404, "finished round closed");
 
@@ -149,4 +149,29 @@ console.log("All server tests passed.");
   assert.deepEqual(st.ids, ids); assert.equal(st.day.n, 1);
   assert.equal(points(0, 15000, 1, "fix"), points(0, 1500, 1, "fix"), "drills have no time pressure");
   console.log("V6 server tests passed.");
+}
+
+// V7: accuracy streak carries across rounds; stretch questions unlock at 8
+{
+  const { LV: L7, BYID: B7, streakMult } = await import("../public/bank.js");
+  const c5 = async (path, body) => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now); return { status: res.status, ...(await res.json()) }; };
+  await c5("register", { user: "streaky", pin: "2222" });
+  const tk = (await c5("login", { user: "streaky", pin: "2222" })).token;
+  const mcs = l => L7[l].q.filter(q => q.type === "mc").map(q => q.id);
+  const stretchIds = mcs(2).slice(0, 4).concat(mcs(3)[0]);
+  assert.equal((await c5("round/start", { user: "streaky", token: tk, level: 2, qids: stretchIds })).status, 400, "stretch locked under 8");
+  assert.equal((await c5("round/start", { user: "streaky", token: tk, level: 2, qids: mcs(2).slice(0, 4).concat(L7[2].q.find(q => q.scenic).id) })).status, 400, "scenic items stay out of rounds");
+  let last;
+  for (let round = 0; round < 2; round++) {
+    const ids = mcs(2).slice(round * 5, round * 5 + 5);
+    const rid = (await c5("round/start", { user: "streaky", token: tk, level: 2, qids: ids })).roundId;
+    for (let i = 0; i < 5; i++) { await c5("round/serve", { user: "streaky", token: tk, roundId: rid, i }); clock += 3000; last = await c5("round/answer", { user: "streaky", token: tk, roundId: rid, i, response: B7[ids[i]].a }); }
+  }
+  assert.equal(last.astreak, 10, "streak carries across rounds");
+  const rid = (await c5("round/start", { user: "streaky", token: tk, level: 2, qids: stretchIds })).roundId;
+  assert.ok(rid, "stretch unlocked at 8+");
+  for (let i = 0; i < 5; i++) { await c5("round/serve", { user: "streaky", token: tk, roundId: rid, i }); clock += 3000; const q = B7[stretchIds[i]]; last = await c5("round/answer", { user: "streaky", token: tk, roundId: rid, i, response: i === 4 ? (q.a + 1) % 4 : q.a }); }
+  assert.equal(last.stretch, true); assert.equal(last.astreak, 14, "missing a stretch question keeps the streak");
+  assert.ok(streakMult(26) === 2 && streakMult(100) === 2, "multiplier caps at 2x");
+  console.log("V7 server tests passed.");
 }

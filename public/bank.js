@@ -1,6 +1,7 @@
 // Proseidon question bank. Shared by the game and the server.
 import { WN, ADD, FIX } from "./bank-v5.js";
 import { EDIT, MORE } from "./bank-v6.js";
+import { LAB, MATCH } from "./bank-v7.js";
 const RAW=[
 {t:"Parts of speech",l:"Every word has a job. Nouns name things. Verbs show action or being. Adjectives describe nouns. Adverbs describe verbs, adjectives, or other adverbs. Pronouns stand in for nouns. Prepositions show position or relation (under, to, after). Conjunctions join (and, but, so). Interjections show feeling (wow). The same word can do different jobs in different sentences.",q:[
 ["Which word is a pronoun? “She handed the report to Mark.”",["handed","report","She","to"],2,"“She” stands in for a person's name."],
@@ -214,7 +215,9 @@ export const LV=RAW.map((L,i)=>({t:L.t,l:L.l,skills:SK[i].names,q:[
   ...L.q.map((r,j)=>mcq(i,`${i}-${j}`,r,(WN[i]||[])[j],SK[i].tags[j])),
   ...EXTRA[i].map((x,j)=>({id:`${i}-x${j}`,lvl:i,...x})),
   ...(ADD[i]||[]).map((r,j)=>mcq(i,`${i}-a${j}`,r,r[4],r[5])),
-  ...(FIX[i]||[]).map((x,j)=>({id:`${i}-f${j}`,lvl:i,type:"fix",...x})),
+  ...(FIX[i]||[]).map((x,j)=>({id:`${i}-f${j}`,lvl:i,type:"fix",scenic:true,...x})),
+  ...(LAB[i]||[]).map((x,j)=>({id:`${i}-l${j}`,lvl:i,scenic:true,...x})),
+  ...(MATCH[i]||[]).map((x,j)=>({id:`${i}-t${j}`,lvl:i,...x})),
   ...(MORE[i]||[]).map((x,j)=>({id:`${i}-m${j}`,lvl:i,...x}))]}));
 export const BYID={};LV.forEach(L=>L.q.forEach(q=>{BYID[q.id]=q}));
 const norm=s=>String(s==null?"":s).trim().toLowerCase().replace(/[’‘]/g,"'").replace(/[.!?]+$/,"");
@@ -233,10 +236,14 @@ export function fixIssues(q,r){
   if(q.min&&n<q.min)out.push(q.minMsg||`Your rewrite looks too short. Make it a full sentence.`);
   return out;
 }
-export function check(q,r){if(q.type==="type")return q.acc.some(a=>norm(a)===norm(r));if(q.type==="fix")return fixIssues(q,r).length===0;return Number(r)===q.a}
-export function answerText(q){if(q.type==="fix")return q.model;return q.type==="mc"?q.o[q.a]:q.type==="tap"?(q.fix?`${q.s[q.a].replace(/[.,]$/,"")} should be “${q.fix}”`:q.s[q.a].replace(/[.,]$/,"")):q.acc[0]}
+const tnorm=t=>String(t).toLowerCase().replace(/[’‘]/g,"'").replace(/\s+([,.;:?!])/g,"$1").replace(/\s+/g," ").trim();
+export function orderText(q,r){return(Array.isArray(r)?r:[]).map(i=>q.tiles[i]).filter(x=>x!=null).join(q.join??" ").replace(/\s+([,.;:?!])/g,"$1")}
+export function check(q,r){if(q.type==="order")return Array.isArray(r)&&q.acc.some(a=>tnorm(a)===tnorm(orderText(q,r)));if(q.type==="match")return Array.isArray(r)&&r.length===q.pairs.length&&r.every((d,i)=>d===i);if(q.type==="multi")return Array.isArray(r)&&r.length===q.a.length&&q.a.every(x=>r.includes(x));if(q.type==="type")return q.acc.some(a=>norm(a)===norm(r));if(q.type==="fix")return fixIssues(q,r).length===0;return Number(r)===q.a}
+export function answerText(q){if(q.type==="fix")return q.model;if(q.type==="order")return q.acc[0];if(q.type==="match")return q.pairs.map(x=>`${x[0]} = ${x[1]}`).join("; ");if(q.type==="multi")return q.a.map((i,k)=>q.s[i].replace(/[.,]$/,"")+(q.fixes?` (should be “${q.fixes[k]}”)`:"")).join(", ");return q.type==="mc"?q.o[q.a]:q.type==="tap"?(q.fix?`${q.s[q.a].replace(/[.,]$/,"")} should be “${q.fix}”`:q.s[q.a].replace(/[.,]$/,"")):q.acc[0]}
+// Accuracy streak: +4% per correct answer in a row (carries across rounds), up to 2x.
+export const streakMult=n=>1+0.04*Math.min(Math.max((n||0)-1,0),25);
 // Rewrite drills take time to type, so they get a flat bonus instead of a fading speed bonus.
-export function points(level,elapsedMs,streak,type){const base=10*(level+1);const sec=elapsedMs/1000;const speed=type==="fix"?0.25:sec<1?0:Math.max(0,1-sec/20)*0.5;const mult=1+0.1*Math.min(Math.max(streak-1,0),4);return Math.round(base*(1+speed)*mult)}
+export function points(level,elapsedMs,streak,type){const base=10*(level+1);const sec=elapsedMs/1000;const speed=type==="fix"?0.25:sec<1?0:Math.max(0,1-sec/20)*0.5;const mult=streakMult(streak);return Math.round(base*(1+speed)*mult)}
 export const ARENA=[
 {id:"a1",title:"The missed deadline",concept:"Past, present, or future",setup:"A coworker missed the monthly report deadline again. You want it on time next month.",moves:[["“You always miss this deadline.”",0,"They get defensive and list excuses. You're now arguing about the past, which can't change."],["“What would help you hit the 5th next month?”",3,"They name a bottleneck and you fix it together. Talking about the future turns blame into a choice."],["“Our team really values reliability.”",1,"They agree in general, but nothing changes. Values talk builds agreement, not action."]],lesson:"Arguments about the past assign blame. Arguments about the present affirm values. Arguments about the future decide choices. To change behavior, argue in the future tense."},
 {id:"a2",title:"Five minutes with the CEO",concept:"Read the room",setup:"You get a five-minute slot to pitch a new review tool to the CEO.",moves:[["Walk through every feature and setting.",0,"The CEO checks the clock by minute two. Too much detail for this audience."],["“It cuts review time in half and lowers our risk of fines.”",3,"The CEO leans in and asks about cost. You matched the message to what this listener cares about."],["Open with three jokes to warm up the room.",1,"A laugh, then a glance at the clock. Friendly, but it spent your scarce time."]],lesson:"Fit your words to the audience and setting. The best argument for one listener can fall flat with another."},
