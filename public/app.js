@@ -2,7 +2,7 @@ import { LV, BYID, ARENA, PLACE_LV, PLACES, check, answerText, rankFor, fixIssue
 
 const PRAISE = ["Smooth sailing.", "The trident strikes true.", "Right on target.", "Clean as a fresh page.", "Spot on.", "Calm seas ahead."];
 const MISS = ["Choppy waters.", "The tide turned on that one.", "Not this time.", "Close, but no pearl."];
-const ONB = ["welcome", "intro", "place", "placed", "loading"];
+const ONB = ["welcome", "intro", "place", "placed", "loading", "forgot", "reccode"];
 const KEY = "proseidon_v4";
 const DAY = 864e5;
 const trident = `<svg viewBox="0 0 24 32" aria-hidden="true"><path d="M12 31V10M5 4v5a7 7 0 0 0 14 0V4M12 4v6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M3 6l2-4 2 4M10 6l2-4 2 4M17 6l2-4 2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
@@ -49,7 +49,7 @@ function draw(l, n, avoid = []) {
   U.seen[l] = U.seen[l].concat(pick);
   return pick;
 }
-function skillHit(q, ok) { const k = q.lvl + "|" + q.tag; const s = U.skills[k] || (U.skills[k] = { r: 0, t: 0 }); s.t++; if (ok) s.r++; }
+function skillHit(q, ok) { const k = q.lvl + "|" + q.tag; const s = U.skills[k] || (U.skills[k] = { r: 0, t: 0 }); s.t++; if (ok) s.r++; const w = U.weeks || (U.weeks = {}), wk = w[weekKey()] || (w[weekKey()] = { r: 0, t: 0 }); wk.t++; if (ok) wk.r++; const ks = Object.keys(w).sort(); if (ks.length > 8) delete w[ks[0]]; }
 const STEPS = [1, 3, 7, 21, 60];
 function addReview(id, conf) { const r = U.review[id]; if (r) { r.step = 0; r.due = Date.now() + DAY; if (conf) r.conf = true; return; } U.review[id] = { due: Date.now() + DAY, step: 0, ...(conf ? { conf: true } : {}) }; }
 // Reviews come back after 1, 3, 7, 21, then 60 days. A miss starts the ladder over.
@@ -121,6 +121,7 @@ function enter(key, res, isNew) {
   PTS = { week: res.weekPts || 0, all: res.allPts || 0 }; ADMIN = !!res.isAdmin;
   $("inboxT").hidden = !ADMIN;
   refreshDaily(); S.lvl = U.lvl || 0; save(); tag(!isNew);
+  if (res.recovery) { S.recovery = res.recovery; S.recNext = U.placed ? "home" : "intro"; S.mode = "reccode"; return render(); }
   if (U.placed) home(); else { S.mode = "intro"; render(); }
 }
 function welcome(prefill) {
@@ -130,6 +131,7 @@ function welcome(prefill) {
   <p class="lbl" style="margin-top:14px">Have an account, or want one?</p>
   <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wordsmith.42" aria-describedby="nmHelp nmErr" value="${esc(prefill || "")}"><span class="foot" id="nmHelp">Letters, numbers, periods, hyphens, or underscores</span><p class="err" id="nmErr" role="alert"></p></div>
   ${ONLINE ? `<div class="field" style="max-width:160px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="••••" aria-describedby="pinErr"><p class="err" id="pinErr" role="alert"></p></div>` : ""}</div>
+  ${ONLINE ? `<p class="foot"><button class="link small" id="forgot">Forgot your PIN?</button></p>` : ""}
   <p class="err" id="err" role="alert"></p><div id="confirmNew"></div>
   <div class="row"><button class="btn" id="go">Continue</button></div>
   ${others.length ? `<div class="field" style="max-width:none"><span class="lbl">Players on this device</span><div class="row">${others.map(k => `<button class="btn ghost small" data-k="${esc(k)}">${esc(DB.users[k].profile.name)}</button>`).join("")}</div></div>` : ""}
@@ -157,6 +159,7 @@ function welcome(prefill) {
     }
   };
   $("go").onclick = go;
+  if ($("forgot")) $("forgot").onclick = () => { S.forgotName = $("nm").value.trim(); S.mode = "forgot"; render(); };
   $("gD5").onclick = () => enterGuest(startDaily);
   $("gTide").onclick = () => enterGuest(startTide);
   $("gGo").onclick = () => enterGuest();
@@ -175,10 +178,35 @@ function wireGoals(again) { document.querySelectorAll("[data-goal]").forEach(b =
 const CONTEXT = { work: /\b(reports?|clients?|managers?|memos?|meetings?|deadlines?|teams?|office|emails?|reps?|audits?|vendors?|polic(y|ies)|invoices?|slides|board|analysts?|budgets?|launch|files?|CEO)\b/i, school: /\b(class|teachers?|essays?|homework|exams?|tests?|students?|school|professors?|papers?|lectures?|grades?)\b/i };
 // Prefer questions that match the player's goal, when there are enough to choose from.
 function byGoal(ids, n) { const re = U.goal && CONTEXT[U.goal]; if (!re) return ids.slice(0, n); const txt = id => { const q = BYID[id]; return [q.p, ...(q.o || []), ...(q.s || [])].join(" "); }; return ids.slice().sort((a, b) => re.test(txt(b)) - re.test(txt(a))).slice(0, n); }
+function recView() {
+  $("card").innerHTML = `<span class="pill">Save your recovery code</span><p class="prompt">If you ever forget your PIN, this code resets it.</p>
+  <div class="reccode" id="rc">${esc(S.recovery)}</div>
+  <p class="foot">Write it down or save it somewhere safe. It's shown only once. You can get a new one later in Settings.</p>
+  <div class="row"><button class="btn ghost" id="cp">Copy code</button><button class="btn" id="go">I saved it</button></div><p class="foot" id="cpMsg"></p>`;
+  $("cp").onclick = async () => { try { await navigator.clipboard.writeText(S.recovery); $("cpMsg").textContent = "Copied."; } catch (e) { $("cpMsg").textContent = "Select the code above and copy it."; } };
+  $("go").onclick = () => { S.recovery = null; if (S.recNext === "intro") { S.mode = "intro"; render(); } else home(); };
+}
+function forgotView(name) {
+  $("card").innerHTML = `<span class="pill">Forgot your PIN?</span><p class="prompt">Reset it with your recovery code.</p>
+  <div class="field"><label class="lbl" for="fn">Username</label><input id="fn" class="inp" autocomplete="username" autocapitalize="off" value="${esc(name || "")}"></div>
+  <div class="field"><label class="lbl" for="fc">Recovery code</label><input id="fc" class="inp" autocapitalize="characters" placeholder="ABCDE-23456"></div>
+  <div class="field" style="max-width:160px"><label class="lbl" for="fp">New 4-digit PIN</label><input id="fp" class="inp" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password"></div>
+  <p class="err" id="ferr" role="alert"></p>
+  <div class="row"><button class="btn" id="fgo">Reset my PIN</button><button class="btn ghost" id="fback">Back</button></div>
+  <details class="more"><summary>No recovery code?</summary><p class="foot">Send a request and the game's admin can reset your PIN. Include a way to reach you, like a coworker's name or your email.</p><textarea id="fnote" class="inp" rows="2" maxlength="400" placeholder="How can we reach you?"></textarea><div class="row"><button class="btn ghost" id="fhelp">Send request</button></div><p class="foot" id="fhmsg"></p></details>`;
+  $("fback").onclick = () => { S.mode = "welcome"; render(); };
+  $("fgo").onclick = async () => {
+    const user = $("fn").value.trim(), code = $("fc").value.trim(), newPin = $("fp").value.trim();
+    if (!/^\d{4}$/.test(newPin)) { $("ferr").textContent = "Your new PIN must be exactly 4 numbers."; return; }
+    try { const r = await api("/pin/reset", { user, code, newPin }); carryGuest(user.toLowerCase(), r.name); enter(user.toLowerCase(), r, false); } catch (e) { $("ferr").textContent = e.message; }
+  };
+  $("fhelp").onclick = async () => { const user = $("fn").value.trim(); try { await api("/pin/help", { user, note: $("fnote").value.trim() }); $("fhmsg").textContent = "Request sent. The admin will reset your PIN and get it to you."; } catch (e) { $("fhmsg").textContent = e.message; } };
+  $("fn").focus();
+}
 function intro() {
-  const steps = [["1", "Quick assessment", "Five questions, each harder than the last, set your starting level."], ["2", "Climb and compete", "Clear a level with 4 of 5 right. Fast, correct answers on harder levels earn more leaderboard points."], ["3", "Learn from misses", "Misses open a short lesson and come back later in your review queue."], ["4", "Daily habit", "Finish one round a day to grow your streak. You get one free streak freeze each week."]];
+  const steps = [["1", "Quick assessment", "Five questions set your starting level."], ["2", "Climb", isGuest() ? "Clear a level with 4 of 5 right." : "Clear a level with 4 of 5 right. Right answers earn leaderboard points."], ["3", "Learn from misses", "Each miss opens a short lesson and comes back later for review."], ["4", "Daily habit", "The Daily Five and your Tide take about 5 minutes a day."]];
   $("card").innerHTML = `<span class="pill">How it works</span><p class="prompt">${isGuest() ? "Here's" : esc(U.name) + ", here's"} the plan.</p>
-  <div class="field goalq" style="max-width:none"><span class="lbl">What are you practicing for? (optional)</span><div class="row">${GOALS.map(g => `<button class="btn ghost small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join("")}</div><span class="foot">This tilts examples toward your kind of writing. You can change it on the home screen.</span></div><div class="steps">${steps.map(s => `<div class="step"><span class="num">${s[0]}</span><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div><div class="row"><button class="btn" id="go">Start the assessment</button><button class="btn ghost" id="skip">Skip and start at Level 1</button></div>`;
+  <div class="field goalq" style="max-width:none"><span class="lbl">What are you practicing for? (optional)</span><div class="row">${GOALS.map(g => `<button class="btn ghost small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join("")}</div><span class="foot">This tilts examples toward your kind of writing. You can change it on the home screen.</span></div><div class="row"><button class="btn" id="go">Start the assessment</button><button class="btn ghost" id="skip">Skip and start at Level 1</button></div><details class="more"><summary>How it works</summary><div class="steps">${steps.map(s => `<div class="step"><span class="num">${s[0]}</span><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div></details>`;
   wireGoals(intro);
   $("go").onclick = startPlace; $("skip").onclick = () => { U.placed = true; start(0); }; $("go").focus();
 }
@@ -194,28 +222,39 @@ function placed() {
 /* ---------- home and side screens ---------- */
 function home() { S.mode = "home"; render(); }
 function homeView() {
-  const d = U.daily, done = d.last === today(), due = dueIds().length, weak = weakSpots()[0];
+  const d = U.daily, due = dueIds().length, weak = weakSpots()[0];
   const rk = rankFor(PTS.all), tideDone = U.tide === today();
   const d5 = d5Today(), allDone = d5 && tideDone;
+  const wk = weekStats(), L = LV[S.lvl];
+  const tideWhy = due ? `${Math.min(due, 3)} review question${Math.min(due, 3) === 1 ? "" : "s"} from past misses, plus Level ${S.lvl + 1} practice` : `Level ${S.lvl + 1} practice${weak ? `, with an eye on ${LV[weak.l].skills[weak.tag].toLowerCase()}` : ""}`;
   $("card").innerHTML = `<span class="pill">The Harbor · Home</span>
-  ${isGuest() ? `<div class="fb tip"><h3>Playing as a guest</h3><p>Your progress saves on this device. Create a free account to keep it everywhere and join the leaderboard. Your progress comes with you.</p><div class="row"><button class="btn brass" id="mkAcct">Create an account</button></div></div>` : ""}
+  ${isGuest() ? `<div class="fb tip"><h3>Playing as a guest</h3><p>Progress saves on this device. A free account keeps it everywhere and adds the leaderboard. Your progress comes with you.</p><div class="row"><button class="btn brass" id="mkAcct">Create an account</button></div></div>` : ""}
   ${!U.placed ? `<div class="fb lesson"><h3>Find your level</h3><p>Five quick questions place you at the right level.</p><div class="row"><button class="btn" id="doPlace">Take the assessment</button></div></div>` : ""}
-  ${allDone ? `<div class="fb ok donefor"><h3>That's today.</h3><p>The Daily Five and your Tide are both done. Come back tomorrow for new ones. Extra practice is always open, but your daily work is finished.</p></div>` : ""}
-  <div class="tidecard d5card ${d5 ? "done" : ""}"><div><span class="lbl">Daily Five · same five for everyone</span><b>${d5 ? `${d5.res.filter(Boolean).length} / 5 today &nbsp;${squares(d5.res)}` : "5 questions · easy to hard"}</b><span class="foot">${d5 ? "A new Daily Five arrives tomorrow." : "Everyone plays the same five today, so you can compare with friends."}</span></div><button class="btn ${d5 ? "ghost" : "brass"}" id="d5">${d5 ? "See and share" : "Play the Daily Five"}</button></div>
-  <div class="tidecard ${tideDone ? "done" : ""}"><div><span class="lbl">Today's Tide</span><b>${tideDone ? "Done for today" : "5 questions · about 3 minutes"}</b><span class="foot">${tideDone ? "Nice work. A new Tide rolls in tomorrow. Extra practice is always open." : "A mix of your review questions and your current level. Counts toward your daily goal."}</span></div><button class="btn ${tideDone ? "ghost" : "brass"}" id="tide">${tideDone ? "Play it again" : "Start today's Tide"}</button></div><p class="big">Level ${S.lvl + 1} · ${PLACES[S.lvl]}</p><p class="lead">${LV[S.lvl].t}${U.best[S.lvl] != null ? ` · best ${U.best[S.lvl]}/5` : ""}</p>
-  ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"}</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
-  <div class="grid2">
-    <div class="mini ${done ? "good" : ""}"><span class="lbl">Today's goal</span><b>${done ? "Done" : "Finish 1 round"}</b><span class="foot">Day streak ${d.streak} · ${d.freezes} freeze${d.freezes === 1 ? "" : "s"} left this week</span></div>
-    <div class="mini"><span class="lbl">Review queue</span><b>${due} due</b><span class="foot">${savedIds().length} saved from past misses</span></div>
-    <div class="mini"><span class="lbl">Weakest skill</span><b>${weak ? esc(LV[weak.l].skills[weak.tag]) : "Not enough data yet"}</b><span class="foot">${weak ? `Level ${weak.l + 1} · ${Math.round(weak.acc * 100)}% right` : "Play a few rounds to find out."}</span></div>
-    <div class="mini"><span class="lbl">Leaderboard points</span><b>${AUTH && ONLINE ? PTS.week + " this week" : "Offline"}</b><span class="foot">${AUTH && ONLINE ? PTS.all + " all-time" : "Play online to compete."}</span></div>
-  </div>
-  <div class="badges" aria-label="Level badges">${PLACES.map((pl, k) => `<span class="bdg ${U.best[k] >= 4 ? "got" : ""}" title="${pl}${U.best[k] >= 4 ? " · cleared" : " · not cleared yet"}">${trident}<i>${k + 1}</i></span>`).join("")}</div>
+  ${allDone ? `<div class="fb ok donefor"><h3>That's today.</h3><p>The Daily Five and your Tide are both done. New ones arrive tomorrow. Extra practice is always open below.</p></div>` : ""}
+  <h2 class="sect">Today</h2>
+  <div class="tidecard d5card ${d5 ? "done" : ""}"><div><span class="lbl">Daily Five · same five for everyone</span><b>${d5 ? `${d5.res.filter(Boolean).length} / 5 today &nbsp;${squares(d5.res)}` : "5 questions · easy to hard"}</b><span class="foot">${d5 ? "A new Daily Five arrives tomorrow." : "Compare with friends. About 2 minutes."}</span></div><button class="btn ${d5 ? "ghost" : "brass"}" id="d5">${d5 ? "See and share" : "Play the Daily Five"}</button></div>
+  <div class="tidecard ${tideDone ? "done" : ""}"><div><span class="lbl">Today's Tide · picked for you</span><b>${tideDone ? "Done for today" : "5 questions · about 3 minutes"}</b><span class="foot">${tideDone ? "A new Tide rolls in tomorrow." : `Today: ${esc(tideWhy)}.`}</span></div><button class="btn ${tideDone ? "ghost" : "brass"}" id="tide">${tideDone ? "Play it again" : "Start today's Tide"}</button></div>
+  <h2 class="sect">Your climb</h2>
+  <div class="climb"><div><span class="lbl">Level ${S.lvl + 1} of 10 · ${PLACES[S.lvl]}</span><b>${esc(L.t)}</b><span class="foot">You'll practice: ${esc(Object.values(L.skills).join(", ").toLowerCase())}.${U.best[S.lvl] != null ? ` Best so far ${U.best[S.lvl]}/5.` : ""}</span></div><div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}</div></div>
   <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
+  ${wk.t >= 5 ? `<p class="foot weekline"><b>This week:</b> ${wk.pct}% right on ${wk.t} answers${wk.prev != null ? ` (last week ${wk.prev}%${wk.pct > wk.prev ? ", up " + (wk.pct - wk.prev) + " points" : ""})` : ""}.</p>` : ""}
   ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
-  <div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}${weak ? `<button class="btn ghost" id="dr">Drill weakest skill</button>` : ""}<button class="btn ghost" id="myth">Myth or rule?</button><button class="btn ghost" id="mix">Mix look-alikes</button><button class="btn ghost" id="ar">Enter the Agora</button></div>
-  <p class="foot goalq">Practicing for: ${GOALS.map(g => `<button class="link small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join(" · ")}${U.goal ? "" : " (optional)"}</p>
-  <p class="foot conf">Confidence check: <b>${U.conf ? "On" : "Off"}</b>. ${U.conf ? "You'll tap “sure” or “not sure” before checking." : "Turn it on to tap “sure” or “not sure” before checking. Confident mistakes get extra review."} <button class="link small" id="conf">${U.conf ? "Turn off" : "Turn on"}</button></p>`;
+  ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"} · ${PTS.week} this week</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
+  <details class="more" ${S.openMore ? "open" : ""} id="moreBox"><summary>More practice</summary>
+    <div class="practice">
+      ${weak ? `<button class="pbtn" id="dr"><b>Drill your weakest skill</b><span>${esc(LV[weak.l].skills[weak.tag])} · ${Math.round(weak.acc * 100)}% right</span></button>` : ""}
+      <button class="pbtn" id="myth"><b>Myth or rule?</b><span>Which grammar “rules” are real</span></button>
+      <button class="pbtn" id="mix"><b>Mix look-alikes</b><span>Affect/effect, who/whom, and more</span></button>
+      <button class="pbtn" id="ar"><b>Enter the Agora</b><span>Argument practice scenarios</span></button>
+    </div></details>
+  <details class="more"><summary>Your journey · ${PLACES.filter((_, k) => U.best[k] >= 4).length} of 10 levels cleared</summary>
+    <ol class="journey">${LV.map((lv, k) => { const m = mastery(k); return `<li class="${U.best[k] >= 4 ? "got" : ""} ${k === S.lvl ? "now" : ""}"><span class="jn">${k + 1}</span><div><b>${esc(lv.t)}</b> <span class="foot">${PLACES[k]}${U.best[k] >= 4 ? " · cleared" : ""}</span><span class="foot">${esc(Object.values(lv.skills).join(" · "))}</span>${m != null ? `<div class="bar"><span style="width:${m}%"></span></div><span class="foot">${m}% right so far</span>` : ""}</div><button class="link small" data-lv="${k}">Play</button></li>`; }).join("")}</ol></details>
+  <details class="more"><summary>Settings</summary>
+    <p class="foot goalq">Practicing for: ${GOALS.map(g => `<button class="link small ${U.goal === g[0] ? "on" : ""}" data-goal="${g[0]}">${g[1]}</button>`).join(" · ")}${U.goal ? "" : " (optional)"}</p>
+    <p class="foot">Confidence check: <b>${U.conf ? "On" : "Off"}</b>. Tap “sure” or “not sure” before checking; confident mistakes get extra review. <button class="link small" id="conf">${U.conf ? "Turn off" : "Turn on"}</button></p>
+    <p class="foot">Speed timer: <b>${U.calm ? "Off" : "On"}</b>. ${U.calm ? "No countdown. Right answers earn a steady bonus instead." : "Faster right answers earn more points."} <button class="link small" id="calm">${U.calm ? "Turn on" : "Turn off"}</button></p>
+    ${AUTH && !isGuest() ? `<p class="foot">Recovery code: lets you reset a forgotten PIN. <button class="link small" id="newRec">Get a new code</button></p>` : ""}
+  </details>`;
   $("go").onclick = () => start(S.lvl);
   $("tide").onclick = startTide;
   $("d5").onclick = startDaily;
@@ -224,13 +263,18 @@ function homeView() {
   $("ar").onclick = () => { S.mode = "arena"; render(); };
   $("mix").onclick = startMix;
   $("myth").onclick = startMyths;
+  $("moreBox").ontoggle = e => { S.openMore = e.target.open; };
   wireGoals(render);
   if ($("mkAcct")) $("mkAcct").onclick = () => $("sw").click();
   if ($("doPlace")) $("doPlace").onclick = startPlace;
   $("conf").onclick = () => { U.conf = !U.conf; save(); render(); };
+  $("calm").onclick = () => { U.calm = !U.calm; save(); render(); };
+  if ($("newRec")) $("newRec").onclick = async () => { try { const r = await api("/recovery/new", { ...AUTH }); S.recovery = r.recovery; S.recNext = "home"; S.mode = "reccode"; render(); } catch (e) { toast(e.message); } };
   if ($("skipup")) $("skipup").onclick = () => start(S.lvl + 1);
-  $("go").focus();
 }
+// Share of right answers per level, from skill tracking. null until there's something to show.
+function mastery(l) { let r = 0, t = 0; for (const k in U.skills) if (k.startsWith(l + "|")) { r += U.skills[k].r; t += U.skills[k].t; } return t >= 3 ? Math.round(100 * r / t) : null; }
+function weekStats() { const w = U.weeks || {}, k = weekKey(), cur = w[k] || { r: 0, t: 0 }, keys = Object.keys(w).filter(x => x < k).sort(), prev = keys.length ? w[keys[keys.length - 1]] : null; return { t: cur.t, pct: cur.t ? Math.round(100 * cur.r / cur.t) : 0, prev: prev && prev.t >= 5 ? Math.round(100 * prev.r / prev.t) : null }; }
 function startReview() {
   const due = dueIds(), all = savedIds();
   if (!all.length) { S.mode = "msg"; S.msg = ["Returning Tide · Review", "Nothing to review yet.", "Questions you miss in level rounds land here and come back after 1 day, then 3 days. Answer one right twice in a row and it leaves the queue."]; return render(); }
@@ -321,7 +365,7 @@ function start(k) {
   if (!U) return;
   S.lvl = k; S.round = draw(k, 5); U.last[k] = S.round.slice();
   if ((U.streak || 0) >= 8 && k < LV.length - 1 && AUTH && ONLINE) { const up = draw(k + 1, 3).find(id => BYID[id].type === "mc"); if (up) S.round[4] = up; } S.qi = 0; S.res = []; S.mode = "q"; S.hint = false; S.served = {}; S.qStart = {}; S.roundPts = 0;
-  S.rp = AUTH && ONLINE ? api("/round/start", { ...AUTH, level: k, qids: S.round }).then(r => r.roundId).catch(() => null) : Promise.resolve(null);
+  S.rp = AUTH && ONLINE ? api("/round/start", { ...AUTH, level: k, qids: S.round, calm: !!U.calm }).then(r => r.roundId).catch(() => null) : Promise.resolve(null);
   fresh(); save(); render();
 }
 function serve(i) { if (S.served[i]) return; S.served[i] = S.rp.then(id => id ? api("/round/serve", { ...AUTH, roundId: id, i }).then(() => id) : null).catch(() => null); }
@@ -360,11 +404,12 @@ function questionBody(q) {
 function render() {
   stats(); map();
   const onb = ONB.includes(S.mode) || !U;
-  const st = document.querySelector(".stats"); if (st) st.style.display = U ? "" : "none";
+  const st = document.querySelector(".stats"); if (st) st.style.display = U && !(isGuest() && !U.total) ? "" : "none";
   $("map").style.display = onb ? "none" : ""; $("tiles").style.display = onb ? "none" : ""; $("tools").style.display = U ? "" : "none";
   document.querySelectorAll("#tiles .tile").forEach(t => t.classList.toggle("on", t.dataset.view === S.mode || (t.dataset.view === "arena" && S.mode === "scene") || (t.dataset.view === "review" && S.mode === "set" && S.set && S.set.kind === "review") || (t.dataset.view === "d5" && (S.mode === "d5done" || (S.mode === "set" && S.set && S.set.kind === "daily"))) || (t.dataset.view === "tide" && S.mode === "set" && S.set && S.set.kind === "tide")));
   const c = $("card");
   if (S.mode === "loading") { c.innerHTML = `<p class="foot">Loading…</p>`; return; }
+  if (S.mode === "forgot") return forgotView(S.forgotName);
   if (S.mode === "welcome" || !U) return welcome();
   if (S.mode === "intro") return intro();
   if (S.mode === "placed") return placed();
@@ -378,6 +423,7 @@ function render() {
   if (S.mode === "done") return done();
   if (S.mode === "setdone") return setDone();
   if (S.mode === "rules") return rulesView();
+  if (S.mode === "reccode") return recView();
   if (S.mode === "d5done") return dailyDone();
   const L = LV[S.lvl];
   if (S.mode === "lesson") {
@@ -393,7 +439,7 @@ function render() {
   const stretchQ = main && q.lvl !== S.lvl;
   let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(stretchQ ? `Stretch question · Level ${q.lvl + 1} · 1.5x points` : label)}</span>${dots}</div>`;
   if (main && (U.streak || 0) >= 2) h += `<div class="streak"><span>🔥 ${U.streak} in a row</span><span class="foot">Accuracy streak · ${streakMult(U.streak + 1).toFixed(2)}x points on your next right answer</span></div>`;
-  if (main && AUTH && ONLINE && !S.answered && q.type !== "fix") { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
+  if (main && AUTH && ONLINE && !S.answered && q.type !== "fix" && !U.calm) { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
   h += questionBody(q) + `<p class="err" id="err"></p>`;
   if (S.hint && main && !S.answered) h += `<div class="fb tip"><h3>Coach's tip</h3><p>${esc(L.l)}</p></div>`;
   if (S.answered) {
@@ -513,12 +559,16 @@ function advance() {
 function done() {
   const L = LV[S.lvl], sc = S.res.filter(Boolean).length, pass = sc >= 4, nx = S.lvl + 1 < LV.length;
   const missed = S.round.map((id, i) => S.res[i] ? null : BYID[id].p).filter(Boolean);
+  const byTag = {}; S.round.forEach((id, i) => { const q = BYID[id]; if (q.lvl !== S.lvl) return; const t = byTag[q.tag] || (byTag[q.tag] = { r: 0, t: 0 }); t.t++; if (S.res[i]) t.r++; });
+  const tags = Object.entries(byTag), best = tags.filter(([, v]) => v.r === v.t).map(([k]) => L.skills[k]), worst = tags.filter(([, v]) => v.r < v.t).sort((a, b) => a[1].r / a[1].t - b[1].r / b[1].t)[0];
+  S.failTag = worst ? worst[0] : null;
+  const coach = !pass && (best.length || worst) ? `${best.length ? `You were solid on ${esc(best.join(" and ").toLowerCase())}. ` : ""}${worst ? `Next skill to work on: ${esc(L.skills[worst[0]].toLowerCase())}.` : ""}` : "";
   $("card").innerHTML = `<div class="top"><span class="pill">Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${esc(L.t)}</span></div><p class="big">${sc} / 5</p>${AUTH && ONLINE ? `<p class="lead" id="rpts">${S.roundPts ? S.roundPts + " leaderboard points this round" : "Tallying points…"}</p>` : ""}
-  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : "So close. Four correct clears the level."}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : "Run it again for a fresh mix of questions."}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
+  <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : (sc === 3 ? "Almost there. Four correct clears the level." : "Good practice. Four correct clears the level.")}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : `Your progress is saved. ${coach} A fresh mix of questions is ready when you are.`}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
   ${missed.length ? `<div class="fb lesson"><h3>Worth another look</h3><p>${missed.map(esc).join("<br>")}</p></div>` : ""}
-  <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to ${PLACES[S.lvl + 1]}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;
+  <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to ${PLACES[S.lvl + 1]}</button>` : ""}${!pass && S.failTag ? `<button class="btn brass" id="fdrill">Drill ${esc(L.skills[S.failTag].toLowerCase())}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;
   if ($("go")) $("go").onclick = () => start(S.lvl + 1);
-  $("again").onclick = () => start(S.lvl); $("hm").onclick = home; $("rate").onclick = openFb;
+  $("again").onclick = () => start(S.lvl); $("hm").onclick = home; if ($("fdrill")) $("fdrill").onclick = () => startDrill(S.lvl, S.failTag); $("rate").onclick = openFb;
   ($("go") || $("again")).focus();
 }
 function setDone() {
@@ -616,7 +666,8 @@ async function sendFb() {
 async function inboxView() {
   const tab = S.inboxTab || "feedback";
   const head = `<span class="pill">Admin · only you can see this</span><div class="tabs" role="tablist">${[["feedback", "Feedback"], ["reports", "Question reports"], ["health", "Question health"]].map(([k, l]) => `<button role="tab" class="tab ${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-itab="${k}">${l}</button>`).join("")}</div>`;
-  const wire = () => { document.querySelectorAll("[data-itab]").forEach(b => b.onclick = () => { S.inboxTab = b.dataset.itab; render(); }); if ($("hm")) $("hm").onclick = home; };
+  const wire = () => { document.querySelectorAll("[data-itab]").forEach(b => b.onclick = () => { S.inboxTab = b.dataset.itab; render(); });
+    document.querySelectorAll("[data-resetpin]").forEach(b => b.onclick = async () => { const t = b.dataset.resetpin; try { const r = await api("/admin/resetpin", { ...AUTH, target: t }); document.getElementById("rp-" + t).textContent = `New PIN for ${r.name}: ${r.pin}. Send it to them privately.`; } catch (e) { document.getElementById("rp-" + t).textContent = e.message; } }); if ($("hm")) $("hm").onclick = home; };
   const back = `<div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`;
   $("card").innerHTML = head + `<p class="foot">Loading…</p>`; wire();
   try {
@@ -632,10 +683,12 @@ async function inboxView() {
         const items = r.items.filter(x => x.kind === "report");
         $("card").innerHTML = head + `<p class="prompt">${items.length} report${items.length === 1 ? "" : "s"}</p>` + (items.length ? `<div class="skills">${items.map(x => { const q = BYID[x.qid]; let theirs = ""; if (q && x.answer !== "" && x.answer != null) theirs = q.type === "mc" ? q.o[+x.answer] : q.type === "tap" ? q.s[+x.answer] : x.answer; return `<div class="skill"><div class="sk-top"><span><b>Level ${q ? q.lvl + 1 : "?"}</b> <span class="foot">${esc(x.username || "anonymous")} · ${new Date(x.at).toLocaleString()}</span></span><span class="foot">${esc(x.qid)}</span></div><p style="margin:0">${esc(q ? q.p : "(question removed)")}</p><p class="foot" style="margin:0">Answer key: ${q ? esc(answerText(q)) : "?"}${theirs ? ` · They answered: ${esc(theirs)}` : ""}</p>${x.note ? `<p style="margin:0"><b>Note:</b> ${esc(x.note)}</p>` : ""}</div>`; }).join("")}</div>` : `<p class="lead">No question reports yet.</p>`) + back;
       } else {
-        const items = r.items.filter(x => x.kind !== "report");
+        const pins = r.items.filter(x => x.kind === "pinhelp");
+        const items = r.items.filter(x => x.kind !== "report" && x.kind !== "pinhelp");
         const rated = items.filter(x => x.rating);
         const avg = rated.length ? rated.reduce((a, x) => a + x.rating, 0) / rated.length : 0;
-        $("card").innerHTML = head + `<p class="prompt">${items.length} response${items.length === 1 ? "" : "s"}${avg ? ` · average ${avg.toFixed(1)} stars` : ""}</p>` +
+        const pinHtml = pins.length ? `<div class="fb tip"><h3>PIN help requests</h3>${pins.map(x => `<p><b>${esc(x.username)}</b> <span class="foot">${new Date(x.at).toLocaleString()}</span><br>${esc(x.note || "No note")}<br><button class="btn ghost small" data-resetpin="${esc(x.username)}">Reset PIN</button> <span class="foot" id="rp-${esc(x.username)}"></span></p>`).join("")}</div>` : "";
+        $("card").innerHTML = head + pinHtml + `<p class="prompt">${items.length} response${items.length === 1 ? "" : "s"}${avg ? ` · average ${avg.toFixed(1)} stars` : ""}</p>` +
           (items.length ? `<div class="skills">${items.map(x => `<div class="skill"><div class="sk-top"><span><b>${x.rating ? "★".repeat(x.rating) + "☆".repeat(5 - x.rating) : "No rating"}</b> <span class="foot">${esc(x.username || "anonymous")}${x.level ? ` · Level ${x.level}` : ""}</span></span><span class="foot">${new Date(x.at).toLocaleString()}</span></div>${x.comments ? `<p style="margin:0">${esc(x.comments)}</p>` : ""}</div>`).join("")}</div>` : `<p class="lead">No feedback yet.</p>`) + back;
       }
     }

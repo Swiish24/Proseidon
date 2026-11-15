@@ -12,6 +12,10 @@ export const NAME_RULE = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{1,18})[A-Za-z0-9]$/;
 const okName = u => typeof u === "string" && NAME_RULE.test(u);
 const okPin = p => typeof p === "string" && /^\d{4}$/.test(p);
 const hashPin = (pin, salt) => crypto.scryptSync(pin, salt, 32).toString("hex");
+// Recovery codes: 10 characters, no look-alike letters, shown once at sign-up. Only a hash is stored.
+const RC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const newCode = () => { const b = crypto.randomBytes(10); let c = ""; for (let i = 0; i < 10; i++) c += RC[b[i] % RC.length]; return c.slice(0, 5) + "-" + c.slice(5); };
+const normCode = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export function isoWeek(d) {
@@ -86,9 +90,49 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       if (await users.get(key, { type: "json" })) return json({ error: "That username is taken. Try another." }, 409);
       const salt = crypto.randomBytes(16).toString("hex");
       const u = { name: b.user, salt, hash: hashPin(b.pin, salt), created: now(), profile: null, tokens: [] };
-      const token = newToken(u);
+      const token = newToken(u), recovery = newCode();
+      u.rec = hashPin(normCode(recovery), salt);
       await users.setJSON(key, u);
-      return json({ token, name: u.name, profile: null, allPts: 0, weekPts: 0, isAdmin: admins.includes(key) });
+      return json({ token, recovery, name: u.name, profile: null, allPts: 0, weekPts: 0, isAdmin: admins.includes(key) });
+    }
+
+    // ---- PIN recovery ----
+    if (path === "recovery/new" && req.method === "POST") {
+      const [u, err] = await auth(); if (err) return err;
+      const recovery = newCode(); u.rec = hashPin(normCode(recovery), u.salt); await users.setJSON(key, u);
+      return json({ recovery });
+    }
+    if (path === "pin/reset" && req.method === "POST") {
+      if (!okName(b.user)) return json({ error: "Enter your username." }, 400);
+      if (!okPin(b.newPin)) return json({ error: "Your new PIN must be 4 digits." }, 400);
+      const u = await users.get(key, { type: "json" });
+      if (!u) return json({ error: "No player with that username." }, 404);
+      const t = now();
+      if (u.lockUntil && u.lockUntil > t) return json({ error: "Too many tries. Wait 15 minutes and try again." }, 429);
+      if (!u.rec || !safeEq(hashPin(normCode(b.code), u.salt), u.rec)) {
+        u.fails = (u.fails || 0) + 1; if (u.fails >= LOCK_AFTER) { u.lockUntil = t + LOCK_MS; u.fails = 0; }
+        await users.setJSON(key, u);
+        return json({ error: "That recovery code doesn't match. Check it and try again, or ask for help." }, 401);
+      }
+      const recovery = newCode();
+      u.hash = hashPin(b.newPin, u.salt); u.rec = hashPin(normCode(recovery), u.salt); u.fails = 0; u.lockUntil = 0; u.tokens = [];
+      const token = newToken(u); await users.setJSON(key, u);
+      return json({ token, recovery, name: u.name, profile: u.profile, isAdmin: admins.includes(key), ...(await totals()) });
+    }
+    if (path === "pin/help" && req.method === "POST") {
+      if (!okName(b.user)) return json({ error: "Enter your username." }, 400);
+      if (!(await users.get(key, { type: "json" }))) return json({ error: "No player with that username." }, 404);
+      const id = `${now()}-${crypto.randomBytes(4).toString("hex")}`;
+      await feedback.setJSON(id, { kind: "pinhelp", at: now(), username: b.user, note: String(b.note || "").trim().slice(0, 400) });
+      return json({ ok: true });
+    }
+    if (path === "admin/resetpin" && req.method === "POST") {
+      const bad = await needAdmin(); if (bad) return bad;
+      const tk = String(b.target || "").toLowerCase(), u = okName(b.target) && await users.get(tk, { type: "json" });
+      if (!u) return json({ error: "No player with that username." }, 404);
+      const pin = String(crypto.randomInt(0, 10000)).padStart(4, "0");
+      u.hash = hashPin(pin, u.salt); u.tokens = []; u.fails = 0; u.lockUntil = 0; await users.setJSON(tk, u);
+      return json({ ok: true, name: u.name, pin });
     }
 
     if (path === "login" && req.method === "POST") {
@@ -116,7 +160,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const okIds = ids.every(id => BYID[id] && !BYID[id].scenic && !BYID[id].myth && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
       if (ids.length !== 5 || new Set(ids).size !== 5 || !okIds || up > 1 || (up === 1 && (u.astreak || 0) < 8)) return json({ error: "Bad questions." }, 400);
       const id = crypto.randomBytes(12).toString("hex");
-      await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });
+      await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, calm: !!b.calm, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });
       return json({ roundId: id });
     }
 
@@ -140,7 +184,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       const elapsedMs = now() - r.served[i];
       let pts = 0;
       const stretch = q.lvl !== r.lvl;
-      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, q.type); if (stretch) pts = Math.round(pts * 1.5); }
+      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, r.calm ? "fix" : q.type); if (stretch) pts = Math.round(pts * 1.5); }
       else { r.streak = 0; if (!stretch) u.astreak = 0; }
       u.bestStreak = Math.max(u.bestStreak || 0, u.astreak || 0);
       await users.setJSON(key, u);

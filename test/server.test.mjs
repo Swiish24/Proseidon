@@ -187,3 +187,24 @@ console.log("All server tests passed.");
   assert.equal((await c6("daily/submit", { guest: "bad-id", date, res: [true, true, true, true, true] })).status >= 400, true, "bad guest id blocked");
   console.log("V8 server tests passed.");
 }
+
+// V9: PIN recovery
+{
+  const c7 = async (path, body, admins = "") => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now, { admins }); return { status: res.status, ...(await res.json()) }; };
+  const reg = await c7("register", { user: "forgetful", pin: "1357" });
+  assert.match(reg.recovery, /^[A-Z2-9]{5}-[A-Z2-9]{5}$/, "recovery code issued at sign-up");
+  assert.equal((await c7("pin/reset", { user: "forgetful", code: "WRONG-CODE1", newPin: "2468" })).status, 401);
+  const r = await c7("pin/reset", { user: "forgetful", code: reg.recovery.toLowerCase().replace("-", " "), newPin: "2468" });
+  assert.equal(r.status, 200, "code works, case and spacing don't matter"); assert.ok(r.token && r.recovery && r.recovery !== reg.recovery, "new code issued");
+  assert.equal((await c7("login", { user: "forgetful", pin: "2468" })).status, 200, "new PIN works");
+  assert.equal((await c7("login", { user: "forgetful", token: reg.token })).status, 401, "old sessions signed out");
+  assert.equal((await c7("pin/reset", { user: "forgetful", code: reg.recovery, newPin: "1111" })).status, 401, "used code no longer works");
+  assert.equal((await c7("pin/help", { user: "forgetful", note: "lost my code" })).status, 200);
+  const at = (await c7("login", { user: "Dan_W", pin: "1234" })).token;
+  assert.equal((await c7("admin/resetpin", { user: "Dan_W", token: at, target: "forgetful" })).status, 403, "non-admin blocked");
+  const ar = await c7("admin/resetpin", { user: "Dan_W", token: at, target: "forgetful" }, "dan_w");
+  assert.match(ar.pin, /^\d{4}$/); assert.equal((await c7("login", { user: "forgetful", pin: ar.pin })).status, 200, "admin temp PIN works");
+  const inbox = await c7("feedback/list", { user: "Dan_W", token: at }, "dan_w");
+  assert.ok(inbox.items.some(x => x.kind === "pinhelp" && x.username === "forgetful"), "help request in inbox");
+  console.log("V9 server tests passed.");
+}
