@@ -36,7 +36,7 @@ export const LAB = [
  {type:"multi",p:"Tap the 3 filler words you could cut.",s:["We","basically","need","to","really","finalize","the","plan","very","soon."],a:[1,4,8],e:"“Basically,” “really,” and “very” add no meaning here.",tag:"H"}],
 // Level 7
 [{type:"order",p:"Build a simile.",tiles:["The","inbox","was","like","a","flood","is","."],acc:["The inbox was like a flood."],e:"“Like” makes it a comparison: a simile.",tag:"C"},
- {type:"order",p:"Build the sentence with parallel structure.",tiles:["We","will","review","the","data",",","test","the","plan",",","and","launch","on","time","launching","."],acc:["We will review the data, test the plan, and launch on time."],e:"Each item starts with the same verb form: review, test, launch.",tag:"R"},
+ {type:"order",p:"Build the sentence with parallel structure.",tiles:["We","will","review","the","data",",","test","the","plan",",","and","launch","on","time","launching","."],acc:["We will review the data, test the plan, and launch on time.","We will review the data, test the plan and launch on time."],e:"Each item starts with the same verb form: review, test, launch.",tag:"R"},
  {type:"order",p:"Build an understatement that denies the opposite (litotes).",tiles:["That","was","not","a","bad","result","great","."],acc:["That was not a bad result."],e:"“Not bad” praises by denying the opposite.",tag:"X"},
  {type:"multi",p:"Tap every word that signals a comparison.",s:["She","ran","like","the","wind","and","worked","as","hard","as","a","mule."],a:[2,7,9],e:"“Like” and “as ... as” set up similes.",tag:"C"}],
 // Level 8
