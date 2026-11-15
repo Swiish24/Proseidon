@@ -167,7 +167,8 @@ function welcome(prefill) {
     if (!ONLINE) return enter(b.dataset.k, { name: rec.profile.name, profile: rec.profile }, false);
     $("nm").value = rec.profile.name; err("Enter your PIN to continue.", "pin");
   });
-  (prefill && $("pin") ? $("pin") : $("nm")).focus();
+  // Only jump to the sign-in fields for returning players, so phones show the no-account options first.
+  if (prefill) ($("pin") || $("nm")).focus();
 }
 const GOALS = [["work", "Work writing"], ["school", "School"], ["personal", "Personal growth"]];
 function wireGoals(again) { document.querySelectorAll("[data-goal]").forEach(b => b.onclick = () => { U.goal = U.goal === b.dataset.goal ? null : b.dataset.goal; save(); again(); }); }

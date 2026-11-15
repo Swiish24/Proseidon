@@ -186,6 +186,9 @@ details.why ul{margin:6px 0 0;padding-left:20px}
 .goalq .on,.link.on{font-weight:700;text-decoration:underline}.btn.on{border-color:var(--brass);background:var(--brass-soft)}
 .mor{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.morb{justify-content:center;font-weight:700;font-size:18px;padding:16px}
 .oracle{border-left:4px solid var(--brass);background:var(--brass-soft)}.styletip{margin-top:6px}
+[hidden]{display:none!important}
+@media (hover:none){.keyhint{display:none}}
+.tools .danger{border-color:transparent;text-decoration:underline;font-weight:400;opacity:.8}
 .tidecard{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:2px solid var(--brass);background:var(--brass-soft);border-radius:12px;padding:14px 16px}
 .tidecard>div{display:flex;flex-direction:column;gap:2px}
 .tidecard b{font-size:18px}
@@ -239,8 +242,8 @@ textarea.inp{resize:vertical;font-size:16px}
   </nav>
   <nav class="map" id="map" aria-label="Levels"></nav>
   <main class="card" id="card" aria-live="polite"></main>
-  <p class="foot">Each level draws 5 questions from its bank, with no repeats until you've seen them all. Get 4 right to clear a level. Keys 1 to 4 pick an answer, Enter checks it.</p>
-  <div class="row tools" id="tools"><button class="btn ghost small" id="rateT">Rate and give feedback</button><button class="btn ghost small" id="inboxT" hidden>Admin inbox</button><button class="btn ghost small" id="retake">Retake the assessment</button><button class="btn ghost small" id="reset">Reset my progress</button><span id="confirm"></span></div>
+  <p class="foot">Each level draws 5 questions from its bank, with no repeats until you've seen them all. Get 4 right to clear a level.<span class="keyhint"> Keys 1 to 4 pick an answer, Enter checks it.</span></p>
+  <div class="row tools" id="tools"><button class="btn ghost small" id="rateT">Rate and give feedback</button><button class="btn ghost small" id="inboxT" hidden>Admin inbox</button><button class="btn ghost small danger" id="retake">Retake the assessment</button><button class="btn ghost small danger" id="reset">Reset my progress</button><span id="confirm"></span></div>
   <section class="card" id="fbpanel" hidden></section>
 </div>
 <div class="toast" id="toast" role="status"></div>
