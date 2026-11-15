@@ -208,3 +208,24 @@ console.log("All server tests passed.");
   assert.ok(inbox.items.some(x => x.kind === "pinhelp" && x.username === "forgetful"), "help request in inbox");
   console.log("V9 server tests passed.");
 }
+
+// V10: Olympian Trials
+{
+  const { LV: L8, BYID: B8 } = await import("../public/bank.js");
+  const c8 = async (path, body) => { const req = new Request("https://x.test/api/" + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }); const res = await handle(req, S, now); return { status: res.status, ...(await res.json()) }; };
+  await c8("register", { user: "hero", pin: "3333" }); const tk = (await c8("login", { user: "hero", pin: "3333" })).token;
+  const mc = l => L8[l].q.filter(q => q.type === "mc").map(q => q.id);
+  const base = mc(1).slice(0, 5), tid = mc(3)[0], alt = mc(1)[10];
+  const qids = base.slice(); qids[2] = tid;
+  assert.equal((await c8("round/start", { user: "hero", token: tk, level: 1, qids })).status, 400, "a two-up question needs the trial flag");
+  assert.equal((await c8("round/start", { user: "hero", token: tk, level: 1, qids, trial: { i: 2, alt: mc(5)[0] } })).status, 400, "backup must be same level");
+  const play = async (decline) => {
+    const rid = (await c8("round/start", { user: "hero", token: tk, level: 1, qids, trial: { i: 2, alt } })).roundId; let out;
+    for (let i = 0; i < 5; i++) { await c8("round/serve", { user: "hero", token: tk, roundId: rid, i }); clock += 5000;
+      const q = B8[i === 2 ? (decline ? alt : tid) : qids[i]]; const a = await c8("round/answer", { user: "hero", token: tk, roundId: rid, i, response: q.a, declined: i === 2 && decline }); if (i === 2) out = a; }
+    return out; };
+  const acc = await play(false), dec = await play(true);
+  assert.equal(acc.trial, true); assert.equal(dec.trial, false);
+  assert.ok(acc.points > dec.points * 3, "accepted trial pays triple at the higher level");
+  console.log("V10 server tests passed. trial pts", acc.points, "declined pts", dec.points);
+}

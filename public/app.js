@@ -20,7 +20,7 @@ try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); if (d && d.user
 let U = null, AUTH = null, ONLINE = false, ADMIN = false, PTS = { week: 0, all: 0 };
 const S = { mode: "loading", lvl: 0, round: [], qi: 0, res: [], prac: [], pi: 0, sel: null, typed: "", answered: false, pq: [], pres: [], hint: false, order: [0, 1, 2, 3], set: null, rp: null, served: {}, qStart: {}, roundPts: 0, arena: null, lb: "week" };
 
-function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, d5: null, updatedAt: 0 }; }
+function blank(name) { return { name, lvl: 0, xp: 0, best: {}, right: 0, total: 0, streak: 0, placed: false, seen: {}, last: {}, review: {}, skills: {}, daily: { streak: 0, last: null, freezes: 1, fweek: null }, arena: {}, tide: null, d5: null, tokens: {}, updatedAt: 0 }; }
 function fill(p) { const b = blank(p.name); for (const k in b) if (p[k] == null) p[k] = b[k]; return p; }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
 let syncTimer = null;
@@ -127,13 +127,13 @@ function enter(key, res, isNew) {
 function welcome(prefill) {
   const others = Object.keys(DB.users).filter(k => k !== GUEST);
   $("card").innerHTML = `<p class="big">Welcome aboard.</p><p class="lead">Proseidon is a game for sharper English. Climb ten levels, from parts of speech to PhD-level rhetoric, and compete on the leaderboard.</p>
-  <div class="fb tip guestbox"><h3>Play now, no account needed</h3><p>Progress saves on this device. Make an account anytime to keep it everywhere and join the leaderboard.</p><div class="row"><button class="btn brass" id="gD5">Play today's Daily Five</button><button class="btn ghost" id="gTide">Today's Tide</button><button class="btn ghost" id="gGo">Continue as a guest</button></div></div>
-  <p class="lbl" style="margin-top:14px">Have an account, or want one?</p>
+  <p class="foot"><b>Create a free account</b> to save your progress on any device, earn Olympian tokens, and climb the leaderboard. Already have one? Sign in below.</p>
   <div class="row" style="align-items:flex-start"><div class="field"><label for="nm" class="lbl">Username</label><input id="nm" class="inp" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="wordsmith.42" aria-describedby="nmHelp nmErr" value="${esc(prefill || "")}"><span class="foot" id="nmHelp">Letters, numbers, periods, hyphens, or underscores</span><p class="err" id="nmErr" role="alert"></p></div>
   ${ONLINE ? `<div class="field" style="max-width:160px"><label for="pin" class="lbl">4-digit PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="••••" aria-describedby="pinErr"><p class="err" id="pinErr" role="alert"></p></div>` : ""}</div>
   ${ONLINE ? `<p class="foot"><button class="link small" id="forgot">Forgot your PIN?</button></p>` : ""}
   <p class="err" id="err" role="alert"></p><div id="confirmNew"></div>
-  <div class="row"><button class="btn" id="go">Continue</button></div>
+  <div class="row"><button class="btn" id="go">Sign in or sign up</button></div>
+  <div class="guestbox2"><span class="lbl">Just want to try it first?</span><div class="row"><button class="btn ghost small" id="gD5">Play today's Daily Five</button><button class="btn ghost small" id="gTide">Today's Tide</button><button class="btn ghost small" id="gGo">Continue as a guest</button></div><span class="foot">Guest progress saves on this device and moves into your account when you make one.</span></div>
   ${others.length ? `<div class="field" style="max-width:none"><span class="lbl">Players on this device</span><div class="row">${others.map(k => `<button class="btn ghost small" data-k="${esc(k)}">${esc(DB.users[k].profile.name)}</button>`).join("")}</div></div>` : ""}
   <p class="foot">${ONLINE ? "New here? Pick a username and PIN. Returning? Enter yours to pick up on any device." : "Offline mode: progress saves in this browser only, and scores won't post to the leaderboard."}</p>`;
   const clearErrs = () => { ["err", "nmErr", "pinErr"].forEach(id => { if ($(id)) $(id).textContent = ""; }); ["nm", "pin"].forEach(id => { if ($(id)) $(id).classList.remove("wrong"); }); };
@@ -149,7 +149,7 @@ function welcome(prefill) {
     $("go").textContent = "Checking…";
     try { enter(k, await api("/login", { user: v, pin }), false); }
     catch (e) {
-      $("go").textContent = "Continue";
+      $("go").textContent = "Sign in or sign up";
       if (e.status === 404) {
         err("");
         $("confirmNew").innerHTML = `<div class="fb tip"><h3>New player?</h3><p>No one has the username “${esc(v)}” yet. Create it with this PIN? Remember your PIN. You'll need it on other devices.</p><div class="row" style="margin-top:8px"><button class="btn brass" id="mk">Create player</button></div></div>`;
@@ -237,6 +237,7 @@ function homeView() {
   <h2 class="sect">Your climb</h2>
   <div class="climb"><div><span class="lbl">Level ${S.lvl + 1} of 10 · ${PLACES[S.lvl]}</span><b>${esc(L.t)}</b><span class="foot">You'll practice: ${esc(Object.values(L.skills).join(", ").toLowerCase())}.${U.best[S.lvl] != null ? ` Best so far ${U.best[S.lvl]}/5.` : ""}</span></div><div class="row"><button class="btn" id="go">Play Level ${S.lvl + 1}</button>${due ? `<button class="btn ghost" id="rv">Review ${due} due</button>` : ""}</div></div>
   <div class="streakrow"><span>🔥 Accuracy streak <b>${U.streak || 0}</b>${U.bestStreak ? ` · best ${U.bestStreak}` : ""}</span><span class="foot">${(U.streak || 0) >= 8 ? "Stretch questions from the next level are unlocked." : `${8 - (U.streak || 0)} more right in a row unlocks stretch questions.`}</span></div>
+  <p class="foot tokens"><b>Olympian tokens:</b> ${Object.entries(GODS).map(([k, g]) => `<span title="${g.name}'s ${g.token}">${g.icon} ${(U.tokens || {})[k] || 0}</span>`).join(" ")} <span class="foot">Win them in rare Trials during level rounds.</span></p>
   ${wk.t >= 5 ? `<p class="foot weekline"><b>This week:</b> ${wk.pct}% right on ${wk.t} answers${wk.prev != null ? ` (last week ${wk.prev}%${wk.pct > wk.prev ? ", up " + (wk.pct - wk.prev) + " points" : ""})` : ""}.</p>` : ""}
   ${(U.streak || 0) >= 15 && S.lvl < LV.length - 1 ? `<div class="fb ok"><h3>You're on a roll.</h3><p>${U.streak} right in a row. Ready to try Level ${S.lvl + 2}?</p><div class="row"><button class="btn brass" id="skipup">Try Level ${S.lvl + 2}</button></div></div>` : ""}
   ${AUTH && ONLINE ? `<div class="rank"><span><b>${rk.name}</b>${rk.next ? ` · ${(rk.next.at - PTS.all).toLocaleString()} points to ${rk.next.name}` : " · the highest rank"} · ${PTS.week} this week</span><div class="bar sea"><span style="width:${rk.next ? Math.round(100 * (PTS.all - rk.min) / (rk.next.at - rk.min)) : 100}%"></span></div></div>` : ""}
@@ -360,12 +361,50 @@ async function lbView() {
   } catch (e) { $("card").innerHTML = head + `<p class="err">The leaderboard couldn't load. Try again in a moment.</p><div class="row"><button class="btn ghost" id="hm">Back to home</button></div>`; wire(); }
 }
 
+/* ---------- Olympian Trials ---------- */
+// About 1 in 12 level-round questions, a god offers a harder question (up to two levels up).
+// Accepting is optional. A right answer pays triple points and earns that god's token. A miss never breaks the streak.
+const GODS = {
+  athena: { name: "Athena", token: "owl", icon: "🦉", domain: "argument and rhetoric" },
+  hermes: { name: "Hermes", token: "winged sandals", icon: "🪽", domain: "clear, swift messages", plural: true },
+  apollo: { name: "Apollo", token: "lyre", icon: "🎶", domain: "sound and language" },
+  hephaestus: { name: "Hephaestus", token: "hammer", icon: "🔨", domain: "well-built sentences" },
+  zeus: { name: "Zeus", token: "thunderbolt", icon: "⚡", domain: "the hardest questions" }
+};
+function godFor(q) {
+  if (q.lvl === 3 || q.lvl === 5) return "hermes";
+  if (q.lvl === 6) return ["A", "X"].includes(q.tag) ? "athena" : "apollo";
+  if (q.lvl === 8) return "apollo";
+  if (q.lvl === 9) return q.tag === "C" ? "athena" : "zeus";
+  return "hephaestus";
+}
+function maybeTrial(k) {
+  S.trial = null;
+  if (Math.random() >= 5 / 12) return;
+  const tl = Math.min(k + 2, LV.length - 1), i = 1 + Math.floor(Math.random() * 3);
+  const pool = shuffle(LV[tl].q.filter(q => q.type === "mc" && !S.round.includes(q.id)).map(q => q.id)); if (!pool.length) return;
+  const id = pool[0], alt = S.round[i];
+  S.round[i] = id; S.trial = { i, id, alt, god: godFor(BYID[id]), accepted: null };
+}
+function trialOffer() {
+  const g = GODS[S.trial.god], q = BYID[S.trial.id], have = (U.tokens || {})[S.trial.god] || 0;
+  $("card").innerHTML = `<div class="trial"><span class="pill gold">${g.icon} An Olympian Trial</span><p class="prompt">${g.name} offers you a trial.</p>
+  <p class="lead">A harder question from Level ${q.lvl + 1}, on ${esc(g.domain)}. Answer it right for <b>triple points</b> and ${g.name}'s ${g.token}.${have ? ` You have ${have} so far.` : ""}</p>
+  <p class="foot">Missing a trial never breaks your streak. Saying no gives you a regular question instead.</p>
+  <div class="row"><button class="btn brass" id="tAcc">Accept the trial</button><button class="btn ghost" id="tDec">Not today</button></div></div>`;
+  $("tAcc").onclick = () => { S.trial.accepted = true; fresh(); render(); };
+  $("tDec").onclick = () => { S.trial.accepted = false; S.round[S.trial.i] = S.trial.alt; fresh(); render(); };
+  $("tAcc").focus();
+}
+const trialNow = () => S.mode === "q" && S.trial && S.qi === S.trial.i && S.trial.accepted === true;
+
 /* ---------- rounds ---------- */
 function start(k) {
   if (!U) return;
   S.lvl = k; S.round = draw(k, 5); U.last[k] = S.round.slice();
-  if ((U.streak || 0) >= 8 && k < LV.length - 1 && AUTH && ONLINE) { const up = draw(k + 1, 3).find(id => BYID[id].type === "mc"); if (up) S.round[4] = up; } S.qi = 0; S.res = []; S.mode = "q"; S.hint = false; S.served = {}; S.qStart = {}; S.roundPts = 0;
-  S.rp = AUTH && ONLINE ? api("/round/start", { ...AUTH, level: k, qids: S.round, calm: !!U.calm }).then(r => r.roundId).catch(() => null) : Promise.resolve(null);
+  if ((U.streak || 0) >= 8 && k < LV.length - 1 && AUTH && ONLINE) { const up = draw(k + 1, 3).find(id => BYID[id].type === "mc"); if (up) S.round[4] = up; }
+  maybeTrial(k); S.qi = 0; S.res = []; S.mode = "q"; S.hint = false; S.served = {}; S.qStart = {}; S.roundPts = 0;
+  S.rp = AUTH && ONLINE ? api("/round/start", { ...AUTH, level: k, qids: S.round, calm: !!U.calm, ...(S.trial ? { trial: { i: S.trial.i, alt: S.trial.alt } } : {}) }).then(r => r.roundId).catch(() => null) : Promise.resolve(null);
   fresh(); save(); render();
 }
 function serve(i) { if (S.served[i]) return; S.served[i] = S.rp.then(id => id ? api("/round/serve", { ...AUTH, roundId: id, i }).then(() => id) : null).catch(() => null); }
@@ -431,13 +470,14 @@ function render() {
     $("go").onclick = () => { S.mode = "prac"; S.pi = 0; fresh(); render(); }; $("skipd").onclick = back; $("go").focus(); return;
   }
   const q = curQ(), main = S.mode === "q", pl = S.mode === "place", set = S.mode === "set";
+  if (main && S.trial && S.qi === S.trial.i && S.trial.accepted === null) return trialOffer();
   initState(q);
   if (main && !S.answered) { serve(S.qi); if (!S.qStart[S.qi]) S.qStart[S.qi] = performance.now(); }
   let dots = "";
   if (main || pl || set) { const arr = pl ? S.pres : set ? S.set.res : S.res, n = set ? S.set.ids.length : 5, cur = set ? S.set.i : S.qi; dots = `<div class="dots" aria-label="Question ${cur + 1} of ${n}">${Array.from({ length: n }, (_, k) => `<span class="dot ${arr[k] === true ? "ok" : arr[k] === false ? "bad" : k === cur ? "now" : ""}"></span>`).join("")}</div>`; }
   const label = pl ? `Assessment · question ${S.qi + 1} of 5` : main ? `Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${L.t}` : set ? `${S.set.title} · Level ${q.lvl + 1}` : S.pi === 1 ? `Scenic route · writing lab` : `Scenic route · practice`;
-  const stretchQ = main && q.lvl !== S.lvl;
-  let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(stretchQ ? `Stretch question · Level ${q.lvl + 1} · 1.5x points` : label)}</span>${dots}</div>`;
+  const trialQ = trialNow(), stretchQ = main && q.lvl !== S.lvl && !trialQ;
+  let h = `<div class="top"><span class="pill ${main || pl ? "" : "scenic"}">${esc(trialQ ? `${GODS[S.trial.god].icon} Trial of ${GODS[S.trial.god].name} · Level ${q.lvl + 1} · 3x points` : stretchQ ? `Stretch question · Level ${q.lvl + 1} · 1.5x points` : label)}</span>${dots}</div>`;
   if (main && (U.streak || 0) >= 2) h += `<div class="streak"><span>🔥 ${U.streak} in a row</span><span class="foot">Accuracy streak · ${streakMult(U.streak + 1).toFixed(2)}x points on your next right answer</span></div>`;
   if (main && AUTH && ONLINE && !S.answered && q.type !== "fix" && !U.calm) { const el = (performance.now() - S.qStart[S.qi]) / 1000; h += `<div class="tide"><span class="foot">Tide · speed bonus</span><div class="timer"><span style="animation-delay:-${el.toFixed(2)}s"></span></div></div>`; }
   h += questionBody(q) + `<p class="err" id="err"></p>`;
@@ -466,8 +506,9 @@ function render() {
     if (S.sure === true && !ok) h += `<div class="fb tip"><h3>Confident miss</h3><p>You were sure, and it was wrong. These are the mistakes that stick best once corrected, so it goes into your review queue.</p></div>`;
     if (S.sure === false && ok) h += `<p class="foot">Right, but you weren't sure. It will come back once in review to lock it in.</p>`;
     if (stretchQ && !ok) h += `<p class="foot">Stretch questions don't break your streak.</p>`;
+    if (trialQ) { const g = GODS[S.trial.god]; h += ok ? `<div class="fb trialwin"><h3>${g.icon} You passed ${g.name}'s trial.</h3><p>You earned ${g.name}'s ${g.token}. You now have ${(U.tokens || {})[S.trial.god] || 1}.</p></div>` : `<p class="foot">Trials are meant to be hard. Your streak is safe, and this question goes to your review queue.</p>`; }
     h += `<div class="report"><button class="link small" id="rep">Something wrong with this question? Report it</button><div id="repBox"></div></div>`;
-    if (main && !ok) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson, one practice question, and one writing task on this skill, then back to the climb. This question also goes into your review queue.</p></div>`;
+    if (main && !ok && !trialQ) h += `<div class="fb tip"><h3>Scenic route ahead</h3><p>A short lesson, one practice question, and one writing task on this skill, then back to the climb. This question also goes into your review queue.</p></div>`;
   }
   h += `<div class="row">`;
   if (!S.answered) { h += U.conf && q.type !== "fix" && q.type !== "type" ? `<button class="btn" id="go">Check · I'm sure</button><button class="btn ghost" id="go2">Check · Not sure</button>` : `<button class="btn" id="go">Check answer</button>`; if (main) h += `<button class="btn ghost" id="hint">${S.hint ? "Hide tip" : "Coach's tip"}</button>`; }
@@ -475,7 +516,7 @@ function render() {
     const ok = check(q, S.sel);
     if (pl) h += `<button class="btn" id="go">${S.qi < 4 ? "Next question" : "See my starting level"}</button>`;
     else if (set) h += `<button class="btn" id="go">${S.set.i < S.set.ids.length - 1 ? "Next question" : "Finish"}</button>`;
-    else if (main) h += ok ? `<button class="btn" id="go">${S.qi < 4 ? "Next question" : "See results"}</button>` : `<button class="btn brass" id="go">Take the scenic route</button><button class="btn ghost" id="skipd">Skip it</button>`;
+    else if (main) h += ok || trialQ ? `<button class="btn" id="go">${S.qi < 4 ? "Next question" : "See results"}</button>` : `<button class="btn brass" id="go">Take the scenic route</button><button class="btn ghost" id="skipd">Skip it</button>`;
     else h += `<button class="btn" id="go">${S.pi < 1 ? "Next practice" : "Back to the climb"}</button>`;
   }
   h += "</div>";
@@ -524,11 +565,12 @@ function act() {
     else if (set) { if (S.sure === true && !ok) addReview(q.id, true); if (S.sure === false && ok && !U.review[q.id]) addReview(q.id); S.set.res[S.set.i] = ok; if (S.set.kind === "review" || (S.set.kind === "tide" && U.review[q.id])) reviewResult(q.id, ok); if (ok) gain(5); else { shake(); if (S.set.kind === "tide" && !U.review[q.id]) addReview(q.id); } }
     else if (main) {
       S.res[S.qi] = ok;
-      const stretch = q.lvl !== S.lvl; S.lostStreak = 0;
+      const isTrial = trialNow(), stretch = q.lvl !== S.lvl || isTrial; S.lostStreak = 0;
+      if (isTrial && ok) { U.tokens = U.tokens || {}; U.tokens[S.trial.god] = (U.tokens[S.trial.god] || 0) + 1; S.trial.won = true; }
       if (ok) { U.streak++; U.bestStreak = Math.max(U.bestStreak || 0, U.streak); gain(10 + (U.streak >= 3 ? 5 : 0)); if ([10, 25, 50, 100].includes(U.streak)) floatUp(`🔥 ${U.streak} in a row!`, "pts"); if (S.sure === false) addReview(q.id); }
       else { if (!stretch) { S.lostStreak = U.streak; U.streak = 0; } addReview(q.id, S.sure === true); shake(); }
-      const i = S.qi, resp = S.sel;
-      (S.served[i] || Promise.resolve(null)).then(id => id ? api("/round/answer", { ...AUTH, roundId: id, i, response: resp }) : null).then(r => {
+      const i = S.qi, resp = S.sel, declined = !!(S.trial && S.trial.i === i && S.trial.accepted === false);
+      (S.served[i] || Promise.resolve(null)).then(id => id ? api("/round/answer", { ...AUTH, roundId: id, i, response: resp, declined }) : null).then(r => {
         if (!r) return; PTS = { week: r.weekPts, all: r.allPts }; S.roundPts = r.roundPts; if (typeof r.astreak === "number") { U.streak = r.astreak; U.bestStreak = Math.max(U.bestStreak || 0, r.bestStreak || 0); save(); }
         if (r.points + r.bonus > 0) floatUp(`+${r.points + r.bonus} pts`, "pts");
         stats(); if ($("rpts")) $("rpts").textContent = `${r.roundPts} leaderboard points this round`;
@@ -538,7 +580,7 @@ function act() {
   }
   if (pl) { if (S.qi < 4) { S.qi++; fresh(); } else S.mode = "placed"; render(); return; }
   if (set) { if (S.set.i < S.set.ids.length - 1) { S.set.i++; fresh(); } else if (S.set.kind === "daily") { finishDaily(); return; } else { S.mode = "setdone"; if (S.set.kind === "tide" && U.tide !== today()) { U.tide = today(); gain(15); } markDay(); save(); } render(); return; }
-  if (main) { if (check(q, S.sel)) advance(); else { S.prac = [draw(S.lvl, 1, S.round)[0], scenicPick(q.lvl, q.tag)]; S.missTip = TIPS[q.lvl + "|" + q.tag] || ""; save(); S.mode = "lesson"; render(); } return; }
+  if (main) { if (check(q, S.sel) || trialNow()) advance(); else { S.prac = [draw(S.lvl, 1, S.round)[0], scenicPick(q.lvl, q.tag)]; S.missTip = TIPS[q.lvl + "|" + q.tag] || ""; save(); S.mode = "lesson"; render(); } return; }
   if (S.pi < 1) { S.pi++; fresh(); render(); } else back();
 }
 function scenicPick(l, tag) {
@@ -565,6 +607,7 @@ function done() {
   const coach = !pass && (best.length || worst) ? `${best.length ? `You were solid on ${esc(best.join(" and ").toLowerCase())}. ` : ""}${worst ? `Next skill to work on: ${esc(L.skills[worst[0]].toLowerCase())}.` : ""}` : "";
   $("card").innerHTML = `<div class="top"><span class="pill">Level ${S.lvl + 1} · ${PLACES[S.lvl]} · ${esc(L.t)}</span></div><p class="big">${sc} / 5</p>${AUTH && ONLINE ? `<p class="lead" id="rpts">${S.roundPts ? S.roundPts + " leaderboard points this round" : "Tallying points…"}</p>` : ""}
   <div class="fb ${pass ? "ok" : "tip"}"><h3>${pass ? (nx ? "Level cleared. The next rung is open." : "You reached the summit.") : (sc === 3 ? "Almost there. Four correct clears the level." : "Good practice. Four correct clears the level.")}</h3><p>${pass ? `+25 XP bonus. You earned the ${PLACES[S.lvl].replace("The ", "")} badge.` : `Your progress is saved. ${coach} A fresh mix of questions is ready when you are.`}${missed.length ? " Your misses are saved to your review queue." : ""}</p></div>
+  ${S.trial && S.trial.won ? `<div class="fb trialwin"><h3>${GODS[S.trial.god].icon} ${GODS[S.trial.god].name}'s ${GODS[S.trial.god].token} ${GODS[S.trial.god].plural ? "are" : "is"} yours.</h3><p>You passed an Olympian Trial this round.</p></div>` : ""}
   ${missed.length ? `<div class="fb lesson"><h3>Worth another look</h3><p>${missed.map(esc).join("<br>")}</p></div>` : ""}
   <div class="row">${pass && nx ? `<button class="btn" id="go">Climb to ${PLACES[S.lvl + 1]}</button>` : ""}${!pass && S.failTag ? `<button class="btn brass" id="fdrill">Drill ${esc(L.skills[S.failTag].toLowerCase())}</button>` : ""}<button class="btn ${pass && nx ? "ghost" : ""}" id="again">Retry Level ${S.lvl + 1}</button><button class="btn ghost" id="hm">Home</button><button class="btn ghost" id="rate">Rate Proseidon</button></div>`;
   if ($("go")) $("go").onclick = () => start(S.lvl + 1);

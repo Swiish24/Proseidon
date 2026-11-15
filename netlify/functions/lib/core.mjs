@@ -156,11 +156,19 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       if (!(Number.isInteger(lvl) && lvl >= 0 && lvl < LV.length)) return json({ error: "Bad level." }, 400);
       const ids = Array.isArray(b.qids) ? b.qids : [];
       // A long accuracy streak (8+) unlocks one "stretch" question from the next level.
-      const up = ids.filter(id => BYID[id] && BYID[id].lvl === lvl + 1).length;
-      const okIds = ids.every(id => BYID[id] && !BYID[id].scenic && !BYID[id].myth && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
+      // Olympian Trial: one optional harder question (up to two levels up) with a same-level backup if declined.
+      let trial = null;
+      if (b.trial && Number.isInteger(b.trial.i) && b.trial.i >= 0 && b.trial.i < 5) {
+        const tq = BYID[ids[b.trial.i]], aq = BYID[b.trial.alt];
+        if (!tq || tq.type !== "mc" || tq.scenic || tq.myth || tq.lvl < lvl || tq.lvl > lvl + 2 || !aq || aq.lvl !== lvl || aq.scenic || aq.myth || ids.includes(aq.id)) return json({ error: "Bad trial." }, 400);
+        trial = { i: b.trial.i, alt: aq.id };
+      }
+      const rest = trial ? ids.filter((_, k) => k !== trial.i) : ids;
+      const up = rest.filter(id => BYID[id] && BYID[id].lvl === lvl + 1).length;
+      const okIds = rest.every(id => BYID[id] && !BYID[id].scenic && !BYID[id].myth && (BYID[id].lvl === lvl || BYID[id].lvl === lvl + 1));
       if (ids.length !== 5 || new Set(ids).size !== 5 || !okIds || up > 1 || (up === 1 && (u.astreak || 0) < 8)) return json({ error: "Bad questions." }, 400);
       const id = crypto.randomBytes(12).toString("hex");
-      await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, calm: !!b.calm, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });
+      await rounds.setJSON(id, { user: key, name: u.name, lvl, ids, trial, calm: !!b.calm, i: 0, served: [], streak: 0, right: 0, pts: 0, created: now() });
       return json({ roundId: id });
     }
 
@@ -179,12 +187,13 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       }
 
       if (!r.served[i]) return json({ error: "Out of order." }, 409);
-      const q = BYID[r.ids[i]];
+      const isTrial = r.trial && r.trial.i === i, declined = isTrial && !!b.declined;
+      const q = BYID[declined ? r.trial.alt : r.ids[i]];
       const correct = check(q, b.response);
       const elapsedMs = now() - r.served[i];
       let pts = 0;
-      const stretch = q.lvl !== r.lvl;
-      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, r.calm ? "fix" : q.type); if (stretch) pts = Math.round(pts * 1.5); }
+      const stretch = q.lvl !== r.lvl, trialOn = isTrial && !declined;
+      if (correct) { r.streak += 1; r.right += 1; u.astreak = (u.astreak || 0) + 1; pts = points(q.lvl, elapsedMs, u.astreak, r.calm ? "fix" : q.type); if (trialOn) pts *= 3; else if (stretch) pts = Math.round(pts * 1.5); }
       else { r.streak = 0; if (!stretch) u.astreak = 0; }
       u.bestStreak = Math.max(u.bestStreak || 0, u.astreak || 0);
       await users.setJSON(key, u);
@@ -195,7 +204,7 @@ export async function handle(req, store, now = () => Date.now(), opts = {}) {
       r.pts += pts + bonus;
       if (finished) await rounds.delete(rid); else await rounds.setJSON(rid, r);
       if (pts + bonus > 0 || finished) await addPts(u.name, pts + bonus, finished);
-      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, astreak: u.astreak || 0, bestStreak: u.bestStreak || 0, stretch, ...(await totals()) });
+      return json({ correct, points: pts, bonus, roundPts: r.pts, elapsedMs, finished, astreak: u.astreak || 0, bestStreak: u.bestStreak || 0, stretch, trial: trialOn, ...(await totals()) });
     }
 
     // ---- Daily Five: shared daily set, kept off the leaderboard ----
